@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using DigiProofs.JSONUploader;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Newtonsoft.Json;
 
 namespace JSONUploaderTest
 {
