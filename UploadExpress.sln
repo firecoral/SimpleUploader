@@ -1,0 +1,45 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UploadExpress", "SimpleUploader\UploadExpress.csproj", "{160FDDF5-211B-4505-AFBA-0018C300054C}"
+	ProjectSection(ProjectDependencies) = postProject
+		{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3} = {BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SoapUploader", "SoapUploader\ClassLibrary2\SoapUploader.csproj", "{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSONUploader", "JSONUploader\JSONUploader.csproj", "{ED381490-3635-4461-918B-EEBD6AB6C77D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSONUploaderTest", "JSONUploaderTest\JSONUploaderTest.csproj", "{9B81D2E1-780F-4E56-A6BE-0FB2765A0D07}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{160FDDF5-211B-4505-AFBA-0018C300054C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{160FDDF5-211B-4505-AFBA-0018C300054C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{160FDDF5-211B-4505-AFBA-0018C300054C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{160FDDF5-211B-4505-AFBA-0018C300054C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1D7ABC6-419F-4451-8070-E373FCB85507}.Debug|Any CPU.ActiveCfg = Debug
+		{B1D7ABC6-419F-4451-8070-E373FCB85507}.Release|Any CPU.ActiveCfg = Release
+		{B1D7ABC6-419F-4451-8070-E373FCB85507}.Release|Any CPU.Build.0 = Release
+		{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ED381490-3635-4461-918B-EEBD6AB6C77D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED381490-3635-4461-918B-EEBD6AB6C77D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED381490-3635-4461-918B-EEBD6AB6C77D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED381490-3635-4461-918B-EEBD6AB6C77D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9B81D2E1-780F-4E56-A6BE-0FB2765A0D07}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B81D2E1-780F-4E56-A6BE-0FB2765A0D07}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B81D2E1-780F-4E56-A6BE-0FB2765A0D07}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B81D2E1-780F-4E56-A6BE-0FB2765A0D07}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
