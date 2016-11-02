@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
-using System.Net.Http.Formatting;
+//using System.Net.Http.Formatting;
 using System.Net.Http.Headers;
 using System.Linq;
 using System.Text;
@@ -77,7 +77,11 @@ namespace DigiProofs.JSONUploader
             multipartFormDataContent.Add(commandContent, "\"command\"");
             HttpResponseMessage response = await httpClient.PostAsync("ul/upload", multipartFormDataContent);
             if (response.IsSuccessStatusCode) {
-                token = await response.Content.ReadAsAsync<Token>();
+                // ReadAsAsync is a nice way to deserialize the JSON into an object,
+                // but the are library issues that keep it from working at the moment,
+                ////token = await response.Content.ReadAsAsync<Token>();
+                string result = await response.Content.ReadAsStringAsync();
+                token = JsonConvert.DeserializeObject<Token>(result);
                 this.uploadToken = token.token;
                 Console.WriteLine("Code: {0}", token.code);
                 Console.WriteLine("Message: {0}", token.message);
