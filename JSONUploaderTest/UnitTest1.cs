@@ -23,6 +23,7 @@ namespace JSONUploaderTest
                 Debug.WriteLine("testing GetToken");
                 string token = await session.GetToken("2081");
                 Console.WriteLine("token: {0}", session.UploadToken);
+                EventList eventList = await session.GetEventList();
             }
             catch (Exception e) {
                 Console.WriteLine(e.ToString());
