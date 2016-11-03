@@ -73,6 +73,7 @@ namespace DigiProofs.JSONUploader {
         UploadDenied,       // Given (sub) account not permitted to upload to the server
         InvalidFile,        // Some problem opening or scaling an image file
         InvalidImage,       // Server didn't like image.
+        InvalidPage,        // Page doesn't exist (pro could remove it?)
         EventExpired,       // This event has expired.
         PageFull,           // Page was too full for upload
         EventFull,          // Event has no more room for images.
@@ -339,7 +340,6 @@ namespace DigiProofs.JSONUploader {
             try {
                 if (this.uploadToken == null)
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
-                NewPage newPage = null;
                 MultipartFormDataContent multipartFormDataContent = new MultipartFormDataContent();
                 HttpContent commandContent = new StringContent("upload");
                 multipartFormDataContent.Add(commandContent, "\"command\"");
@@ -349,26 +349,36 @@ namespace DigiProofs.JSONUploader {
                 multipartFormDataContent.Add(page_idContent, "\"page_id\"");
                 StreamContent imageContent = new StreamContent(image);
                 imageContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data");
-                imageContent.Headers.ContentDisposition.FileName = filename;
+                imageContent.Headers.ContentDisposition.Name = "\"file\"";
+                imageContent.Headers.ContentDisposition.FileName = "\"" + filename + "\"";
                 imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpg");
-                imageContent.Headers.ContentLength = image.Length;
+                //imageContent.Headers.ContentLength = image.Length;
                 multipartFormDataContent.Add(imageContent);
                 HttpResponseMessage response = await httpClient.PostAsync("ul/upload", multipartFormDataContent);
                 if (response.IsSuccessStatusCode) {
                     string result = await response.Content.ReadAsStringAsync();
                     Upload upload = JsonConvert.DeserializeObject<Upload>(result);
-                    switch (newPage.code) {
+                    switch (upload.code) {
                         case 100:
-                            pageHash.Add(newPage.page_id, newPage);
                             logs.Add(new LogEvent("Upload Complete: " + upload.image_id, ""));
                             return upload.image_id;
                         case 1030:
                             throw new SessionException(upload.message, SessionError.NotLoggedIn);
                         case 1010:
                             throw new SessionException(upload.message, SessionError.UploadDenied);
+                        case 1060:
+                            throw new SessionException(upload.message, SessionError.InvalidPage);
+                        case 1090:
+                            throw new SessionException(upload.message, SessionError.EventExpired);
+                        case 1100:
+                            throw new SessionException(upload.message, SessionError.PageFull);
+                        case 1110:
+                            throw new SessionException(upload.message, SessionError.InvalidImage);
                         case 1001: // Missing Parameter
                         case 1040: // Invalid Event
                         case 1050: // Illegal Event
+                        case 1070: // Internal error (in Upload server)
+                        case 1080: // Missing filename (in HTTP protocol)
                             throw new SessionException(upload.message, SessionError.InternalError);
                         default:
                             throw new SessionException(upload.message, SessionError.UnknownError);
