@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSONUploader", "JSONUploade
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSONUploaderTest", "JSONUploaderTest\JSONUploaderTest.csproj", "{9B81D2E1-780F-4E56-A6BE-0FB2765A0D07}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Logger", "ClassLibrary1\Logger.csproj", "{6FA96874-CDE9-4166-994B-C8845538D098}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,9 +25,6 @@ Global
 		{160FDDF5-211B-4505-AFBA-0018C300054C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{160FDDF5-211B-4505-AFBA-0018C300054C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{160FDDF5-211B-4505-AFBA-0018C300054C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B1D7ABC6-419F-4451-8070-E373FCB85507}.Debug|Any CPU.ActiveCfg = Debug
-		{B1D7ABC6-419F-4451-8070-E373FCB85507}.Release|Any CPU.ActiveCfg = Release
-		{B1D7ABC6-419F-4451-8070-E373FCB85507}.Release|Any CPU.Build.0 = Release
 		{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -38,6 +37,10 @@ Global
 		{9B81D2E1-780F-4E56-A6BE-0FB2765A0D07}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9B81D2E1-780F-4E56-A6BE-0FB2765A0D07}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9B81D2E1-780F-4E56-A6BE-0FB2765A0D07}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6FA96874-CDE9-4166-994B-C8845538D098}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FA96874-CDE9-4166-994B-C8845538D098}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FA96874-CDE9-4166-994B-C8845538D098}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FA96874-CDE9-4166-994B-C8845538D098}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Collections;
 using System.ComponentModel;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using DigiProofs.SoapUpload;
 
@@ -125,11 +126,13 @@ namespace UploadExpress {
 	    }
 	    // Although we usually come into this method logged in, if there was a session error followed
 	    // by a failed relogin attempt, we should try to log in again here.
-	    if (!account.Session.LoggedIn) {
+	    if (account.Session.UploadToken == null) {
 		BeginInvoke(uploadStatusDelegate, new object[] {"Retrying Login", "", ""});
 		try {
-		    account.Session.Login();
-		    contiguousErrors = 0;
+                    // XXX account.Session.GetToken("2081").Wait();  // XXX fetch password
+                    if (account.Session.UploadToken == null)
+                        throw new Exception("Could not login");
+                    contiguousErrors = 0;
 		}
 		catch {
 		    totalErrors++;
@@ -156,7 +159,8 @@ namespace UploadExpress {
 		curUploadSet = uploadSet;
 	    }
 	    if (page.pageID == 0) {
-		account.Session.NewPage(uploadSet.eventID, page.title, "", new DPDoneHandler(this.PageDone), workUnit);
+                // XXX string page_id = account.Session.NewPage(uploadSet.eventID, page.title).Wait();
+                // XXX account.Session.NewPage(uploadSet.eventID, page.title, "", new DPDoneHandler(this.PageDone), workUnit);
 	    }
 	    else {
 		int compression = -1;
@@ -168,7 +172,7 @@ namespace UploadExpress {
 				    "Image: " + image.Title
 				});
 		try {
-		    account.Session.Upload(page.pageID, image.Path, compression, new DPDoneHandler(this.UploadDone), workUnit);
+		    //XXX account.Session.Upload(page.pageID, image.Path, compression, new DPDoneHandler(this.UploadDone), workUnit);
 		}
 		catch {
 		    // The only exception we expect to see here is if there is some error with the file, so
@@ -202,7 +206,7 @@ namespace UploadExpress {
 		    case SessionError.InvalidSession:	    // Attempt to login again.
 			BeginInvoke(uploadStatusDelegate, new object[] {"Retrying Login", "", ""});
 			try {
-			    account.Session.Login();
+			    // XXX account.Session.Login();
 			}
 			catch {
 			    totalErrors++;
@@ -241,7 +245,7 @@ namespace UploadExpress {
 		    case SessionError.InvalidSession:	    // Attempt to login again.
 			BeginInvoke(uploadStatusDelegate, new object[] {"Retrying Login", "", ""});
 			try {
-			    account.Session.Login();
+			    // XXX account.Session.Login();
 			}
 			catch {
 			    totalErrors++;

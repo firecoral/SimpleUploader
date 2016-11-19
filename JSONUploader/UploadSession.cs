@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using DigiProofs.Logger;
 
 namespace DigiProofs.JSONUploader {
     /// <summary>
@@ -27,14 +28,14 @@ namespace DigiProofs.JSONUploader {
     public class Page {
         public string max_images { get; set; }
         public string current_images { get; set; }
-        public string id { get; set; }
+        public int page_id { get; set; }
         public string title { get; set; }
     }
 
     public class Event {
         public string current_images { get; set; }
         public int max_images { get; set; }
-        public string id { get; set; }
+        public int event_id { get; set; }
         public string title { get; set; }
         public List<Page> pages { get; set; }
     }
@@ -105,11 +106,10 @@ namespace DigiProofs.JSONUploader {
         private Event[] eventList;
         private HttpClient httpClient;
         private HttpClient httpsClient;
+        private LogList log;
 
         private Hashtable eventHash = new Hashtable();
         private Hashtable pageHash = new Hashtable();
-
-        private LogList logs;
 
         public string Email {
             get { return email; }
@@ -125,15 +125,16 @@ namespace DigiProofs.JSONUploader {
             }
         }
 
-        public NetSession(string host, string email, string uploadToken, string proxy) {
+        public NetSession(LogList log, string host, string email, string uploadToken, string proxy) {
+            this.log = log;
             this.email = email;
             this.uploadToken = uploadToken;
             string HTTPurl = "http://" + host + "/";
             string HTTPSurl = "https://" + host + "/";
             this.proxy = proxy;
-            logs = new LogList();
             string vars = "  http URL: " + HTTPurl + Environment.NewLine + "  https URL: " + HTTPSurl + Environment.NewLine + "  Proxy: " + proxy + Environment.NewLine + "  email: " + email;
-            logs.Add(new LogEvent("Session Created", vars));
+
+            log.Add(new LogEntry("Session Created", vars));
             if (this.proxy != null) {
                 var httpClientHandler = new HttpClientHandler {
                     Proxy = new WebProxy(this.proxy, false),
@@ -156,9 +157,9 @@ namespace DigiProofs.JSONUploader {
 
         // Use the password to obtain a token from the server.
 
-        public async Task GetToken(string password) {
+        public async Task<string> GetToken(string password) {
             try {
-                HttpContent emailContent = new StringContent(this.email);
+                HttpContent emailContent = new StringContent(Email);
                 HttpContent passwordContent = new StringContent(password);
                 HttpContent commandContent = new StringContent("get_token");
                 MultipartFormDataContent multipartFormDataContent = new MultipartFormDataContent();
@@ -178,8 +179,8 @@ namespace DigiProofs.JSONUploader {
                     switch (token.code) {
                         case 100:
                             this.uploadToken = token.token;
-                            logs.Add(new LogEvent("got token for " + email, ""));
-                            break;
+                            log.Add(new LogEntry("got token for " + Email, ""));
+                            return token.token;  // We return the token so that the calling program can cache it.
                         case 1030:
                             throw new SessionException(token.message, SessionError.LoginFail);
                         case 1010:
@@ -196,25 +197,26 @@ namespace DigiProofs.JSONUploader {
                 throw e;
             }
             catch (System.Net.WebException e) {
-                logs.Add(new LogEvent("Network connection error during login to " + email, e.Message));
+                log.Add(new LogEntry("Network connection error during login to " + Email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.NetworkError, e);
             }
 
             catch (System.InvalidOperationException e) {
-                logs.Add(new LogEvent("An InvalidOperationException occurred during login to " + email, e.Message));
+                log.Add(new LogEntry("An InvalidOperationException occurred during login to " + Email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.ServerError, e);
             }
 
             catch (Exception e) {
-                logs.Add(new LogEvent("Unexpected error during login to " + email, e.Message));
+                log.Add(new LogEntry("Unexpected error during login to " + Email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
+            return null;
         }
 
-        public async Task GetEventList() {
+        public async Task GetEventListAsync() {
             try {
                 if (this.uploadToken == null)
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
@@ -233,9 +235,9 @@ namespace DigiProofs.JSONUploader {
                         case 100:
                             this.eventList = eventList.events.ToArray();
                             foreach (Event ev in this.eventList) {
-                                eventHash.Add(ev.id, ev);
+                                eventHash.Add(ev.event_id, ev);
                                 foreach (Page pg in ev.pages)
-                                    pageHash.Add(pg.id, pg);
+                                    pageHash.Add(pg.page_id, pg);
                             }
                             break;
                         case 1030:
@@ -255,25 +257,25 @@ namespace DigiProofs.JSONUploader {
                 throw e;
             }
             catch (System.Net.WebException e) {
-                logs.Add(new LogEvent("Network connection error during event fetch to " + email, e.Message));
+                log.Add(new LogEntry("Network connection error during event fetch to " + email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.NetworkError, e);
             }
 
             catch (System.InvalidOperationException e) {
-                logs.Add(new LogEvent("An InvalidOperationException occurred during event fetch to " + email, e.Message));
+                log.Add(new LogEntry("An InvalidOperationException occurred during event fetch to " + email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.ServerError, e);
             }
 
             catch (Exception e) {
-                logs.Add(new LogEvent("Unexpected error during event fetch to " + email, e.Message));
+                log.Add(new LogEntry("Unexpected error during event fetch to " + email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
         }
 
-        public async Task<string> NewPage(string event_id, string title) {
+        public async Task<string> NewPage(int event_id, string title) {
             try {
                 if (this.uploadToken == null)
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
@@ -283,7 +285,7 @@ namespace DigiProofs.JSONUploader {
                 multipartFormDataContent.Add(commandContent, "\"command\"");
                 HttpContent tokenContent = new StringContent(this.uploadToken);
                 multipartFormDataContent.Add(tokenContent, "\"token\"");
-                HttpContent event_idContent = new StringContent(event_id);
+                HttpContent event_idContent = new StringContent(event_id.ToString());
                 multipartFormDataContent.Add(event_idContent, "\"event_id\"");
                 if (title != null) {
                     HttpContent titleContent = new StringContent(title);
@@ -296,7 +298,7 @@ namespace DigiProofs.JSONUploader {
                     switch (newPage.code) {
                         case 100:
                             pageHash.Add(newPage.page_id, newPage);
-                            logs.Add(new LogEvent("New Page created: " + newPage.title + "(" + newPage.page_id + ")", ""));
+                            log.Add(new LogEntry("New Page created: " + newPage.title + "(" + newPage.page_id + ")", ""));
                             return newPage.page_id;
                         case 1030:
                             throw new SessionException(newPage.message, SessionError.NotLoggedIn);
@@ -317,19 +319,19 @@ namespace DigiProofs.JSONUploader {
                 throw e;
             }
             catch (System.Net.WebException e) {
-                logs.Add(new LogEvent("Network connection error during page create " + email, e.Message));
+                log.Add(new LogEntry("Network connection error during page create " + email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.NetworkError, e);
             }
 
             catch (System.InvalidOperationException e) {
-                logs.Add(new LogEvent("An InvalidOperationException occurred during page create " + email, e.Message));
+                log.Add(new LogEntry("An InvalidOperationException occurred during page create " + email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.ServerError, e);
             }
 
             catch (Exception e) {
-                logs.Add(new LogEvent("Unexpected error during page create " + email, e.Message));
+                log.Add(new LogEntry("Unexpected error during page create " + email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
@@ -360,7 +362,7 @@ namespace DigiProofs.JSONUploader {
                     Upload upload = JsonConvert.DeserializeObject<Upload>(result);
                     switch (upload.code) {
                         case 100:
-                            logs.Add(new LogEvent("Upload Complete: " + upload.image_id, ""));
+                            log.Add(new LogEntry("Upload Complete: " + upload.image_id, ""));
                             return upload.image_id;
                         case 1030:
                             throw new SessionException(upload.message, SessionError.NotLoggedIn);
@@ -391,19 +393,19 @@ namespace DigiProofs.JSONUploader {
                 throw e;
             }
             catch (System.Net.WebException e) {
-                logs.Add(new LogEvent("Network connection error during upload " + filename, e.Message));
+                log.Add(new LogEntry("Network connection error during upload " + filename, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.NetworkError, e);
             }
 
             catch (System.InvalidOperationException e) {
-                logs.Add(new LogEvent("An InvalidOperationException occurred during upload " + filename, e.Message));
+                log.Add(new LogEntry("An InvalidOperationException occurred during upload " + filename, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.ServerError, e);
             }
 
             catch (Exception e) {
-                logs.Add(new LogEvent("Unexpected error during event fetch to " + filename, e.Message));
+                log.Add(new LogEntry("Unexpected error during event fetch to " + filename, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }

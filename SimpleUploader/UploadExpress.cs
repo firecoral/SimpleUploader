@@ -1,14 +1,13 @@
 using System;
-using System.Drawing;
 using System.Collections;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Data;
 using System.Net;
-using DigiProofs.SoapUpload;
+using DigiProofs.JSONUploader;
+using DigiProofs.Logger;
 
 namespace UploadExpress
 {
@@ -16,16 +15,26 @@ namespace UploadExpress
     /// Summary description for Form1.
     /// </summary>
     public class UploadExpress : System.Windows.Forms.Form {
-	private string prefPath;
-	private string acctsPath;
 	public string dataDirPath;
 	private AccountList accounts;
+
+        public Account CurrentAccount {
+            get { return currentAccount; }
+            set { currentAccount = value; }
+        }
 	private Account currentAccount;
+
+        public LogList Log {
+            get { return log; }
+            set { log = value; }
+        }
+        private LogList log; 
+
 	private AccountListDlg accountListDlg;
 	private TreeNode contextNode;	    // To keep track of the object associated with a ContextMenu
 
 	
-	private System.Windows.Forms.MainMenu mainMenu1;
+	private MainMenu mainMenu1;
 	private System.Windows.Forms.MenuItem menuNew;
 	private System.Windows.Forms.MenuItem menuImport;
 	private System.Windows.Forms.MenuItem menuFile;
@@ -56,77 +65,180 @@ namespace UploadExpress
         private System.ComponentModel.IContainer components;
 
 	public UploadExpress() {
-	    //
-	    // Required for Windows Form Designer support
-	    //
-	    InitializeComponent();
+            // If this is a new version, the following does a simple upgrade of the
+            // settings into the new version.
+            if (Properties.Settings.Default.UpgradeRequired) {
+                Properties.Settings.Default.Upgrade();
+                Properties.Settings.Default.UpgradeRequired = false;
+                Properties.Settings.Default.Save();
+            }
+            //
+            // Required for Windows Form Designer support
+            //
+            InitializeComponent();
+
+            Log = new LogList();
 	    this.new_btn.Tag = menuNew;
 	    this.import_btn.Tag = menuImport;
 	    this.upload_btn.Tag = menuUpload;
 	    this.purge_btn.Tag = menuPurge;
-	    Setup();
-
-	    // Get Current account list
-	    try {
-		accounts = AccountList.GetAccounts(acctsPath);
-	    }
-	    catch {
-		accounts = new AccountList(acctsPath);
-	    }
-	    if (accounts.Count == 0) {
-		statusBar1.Text = "No DigiProofs Account";
-		MessageBox.Show("Please use File -> Accounts to add your DigiProofs account.",
-		    "UploadExpress",
-		    MessageBoxButtons.OK,
-		    MessageBoxIcon.Warning);
-	    }
-
-	    accounts.AccountListChanged += new AccountList.AccountListChangedHandler(accountListChanged);
-	    accountListChanged(accounts, EventArgs.Empty);
 	}
 
-	public void Setup() {
-	    // Generate the preferences path and make sure our
-	    // ApplicationData directory exists.
-	    prefPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-	    prefPath += Path.DirectorySeparatorChar;
-	    prefPath += "DigiProofs";
-	    if (!Directory.Exists(prefPath)) {
-		try {
-		    Directory.CreateDirectory(prefPath);
-		}
-		catch {
-		    //XXX  process Error
-		}
-	    }
-	    prefPath += Path.DirectorySeparatorChar;
-	    acctsPath = prefPath;
-	    prefPath += "prefs";
-	    acctsPath += "accounts";
+        public async Task InitializeAsync() {
+            // Generate data file directory and make sure it exists. XXX - Migrate data to Properties.Settings
+            dataDirPath = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+            dataDirPath += Path.DirectorySeparatorChar;
+            dataDirPath += "DigiProofs";
+            if (!Directory.Exists(dataDirPath)) {
+                try {
+                    Directory.CreateDirectory(dataDirPath);
+                }
+                catch {
+                    //XXX  process Error
+                }
+            }
+            dataDirPath += Path.DirectorySeparatorChar;
 
-	    // Generate data file directory and make sure it exists.
-	    dataDirPath = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
-	    dataDirPath += Path.DirectorySeparatorChar;
-	    dataDirPath += "DigiProofs";
-	    if (!Directory.Exists(dataDirPath)) {
-		try {
-		    Directory.CreateDirectory(dataDirPath);
-		}
-		catch {
-		    //XXX  process Error
-		}
-	    }
-	    dataDirPath += Path.DirectorySeparatorChar;
-	}
+            log.Add(new LogEntry("Loading Accounts", ""));
+            accounts = AccountList.GetAccounts();
+            if (accounts.Count == 0) {
+                await InitialAccount();
+            }
+            accounts.AccountListChanged += new AccountList.AccountListChangedHandler(accountListChanged);
+            accountListChanged(accounts, EventArgs.Empty);
+        }
 
-	public Account GetCurrentAccount() {
-	    return currentAccount;
-	}
+        private async Task InitialAccount() {
+            string token = null;
+            log.Add(new LogEntry("Adding Initial Account", ""));
+            statusBar1.Text = "No DigiProofs Account";
+            InitialAccount initialAccountDialog = new InitialAccount();
+            // We will loop here until they have a successful GetToken() or cancel the dialog.
+            while (token == null) {
+                initialAccountDialog.ShowDialog();
+                if (initialAccountDialog.DialogResult == DialogResult.OK) {
+                    string email = initialAccountDialog.Email;
+                    string password = initialAccountDialog.Password;
+                    //
+                    // We are going to create an account here, but we won't save it unless
+                    // we successfully obtain a token for this account and password.
+                    //
+                    Account account = new Account(initialAccountDialog.Email);
+                    string proxy = null;
+                    if (account.ProxyOn)
+                        proxy = account.ProxyHost + ":" + account.ProxyPort.ToString();
+                    account.Session = new NetSession(Log, account.Server, account.Email, account.Token, proxy);
+                    token = await GetToken(account, password);
+                    if (token != null) {
+                        account.Token = token;
+                        account.IsDefault = true;
+                        accounts.Add(account);
+                        log.Add(new LogEntry(String.Format("Added Account {0}", account.Email), ""));
+                        accounts.SaveAccounts();
+                        await account.Session.GetEventListAsync();
+                        log.Add(new LogEntry(String.Format("Obtained Events for {0}", account.Email), ""));
+                        statusBar1.Text = "Logged in as " + CurrentAccount.Email;
+                        return;
+                    }
+                    else {
+                        initialAccountDialog.Password = "";
+                        continue;
+                    }
+                }
+                // if the dialog is cancelled, we abort here.
+                MessageBox.Show("You must provide an account to use this program",
+                            "UploadExpress",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                Environment.Exit(0);
+            }
+        }
 
-	/// <summary>
-	/// Clean up any resources being used.
-	/// </summary>
-	protected override void Dispose(bool disposing) {
+        public async Task LoginAsync(Account account) {
+            if (account.Session == null) {
+                string proxy = null;
+                if (account.ProxyOn)
+                    proxy = account.ProxyHost + ":" + account.ProxyPort.ToString();
+                account.Session = new NetSession(Log, account.Server, account.Email, account.Token, proxy);
+                if (account.Token == null) {
+                    log.Add(new LogEntry(String.Format("No Token for Account {0}", account.Email), ""));
+                    await PasswordAsync(account);
+                    if (account.Token == null) {
+                        CurrentAccount = null;
+                        return;
+                    }
+                }
+                statusBar1.Text = "Logging into " + CurrentAccount.Email;
+                await account.Session.GetEventListAsync();
+                log.Add(new LogEntry(String.Format("Obtained Events for {0}", account.Email), ""));
+                statusBar1.Text = "Logged in as " + CurrentAccount.Email;
+            }
+            CurrentAccount = account;
+            return;
+        }
+
+        public async Task PasswordAsync(Account account) {
+            AccountPassword accountPasswordDialog = new AccountPassword();
+            accountPasswordDialog.ShowDialog();
+            if (accountPasswordDialog.DialogResult == DialogResult.OK) {
+                string password = accountPasswordDialog.Password;
+                string token = await GetToken(account, password);
+                account.Token = token;
+                accounts.SaveAccounts();
+            }
+        }
+
+        // <summary>
+        // Try to obtain an upload token from the upload servers.  On success, return the token
+        // string.  On failure, display a message and return null.
+        // </summary>
+        public async Task<string> GetToken(Account account, string password) {
+            try {
+                string token = await account.Session.GetToken(password);
+                return token;
+            }
+            catch (SessionException ex) {
+                log.Add(new LogEntry("Login Exception", ex.ToString()));
+                string message = "Unexpected Error";
+                switch (ex.Error) {
+                    case SessionError.LoginFail:
+                        message = "Couldn't log into " + CurrentAccount.Email + "." + Environment.NewLine + "Please check your email and password.";
+                        statusBar1.Text = "Login Failed";
+                        break;
+                    case SessionError.NetworkError:
+                        message = "Connection Error: Couldn't connect to the DigiProofs uploaders." +
+                                        Environment.NewLine +
+                                        "Please make sure your computer is connected to the internet." +
+                                        Environment.NewLine +
+                                        "If the problem persists, please contact DigiProofs support (support@digiproofs.com).";
+                        statusBar1.Text = "Connection Failed";
+                        break;
+                    case SessionError.ServerError:
+                        message = "Server Error: An error occurred on the DigiProofs uploaders." +
+                                        Environment.NewLine +
+                                        "Please try restarting this application." +
+                                        Environment.NewLine +
+                                        "If the problem persists, please contact DigiProofs support (support@digiproofs.com).";
+                        statusBar1.Text = "Server Error";
+                        break;
+                    case SessionError.UnknownError:
+                        message = "Connection Error: Couldn't log into DigiProofs Upload Service." + Environment.NewLine + "Error: " + ex.Message;
+                        statusBar1.Text = "Login Error";
+                        break;
+                    default:
+                        message = "Unexpected Error - Could not log in:" + Environment.NewLine + "Error: " + ex.Message;
+                        statusBar1.Text = "Login Error";
+                        break;
+                }
+                MessageBox.Show(message, "UploadExpress", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Clean up any resources being used.
+        /// </summary>
+        protected override void Dispose(bool disposing) {
 	    if (disposing) {
 		if (components != null) {
 		    components.Dispose();
@@ -135,15 +247,15 @@ namespace UploadExpress
 	    base.Dispose(disposing);
 	}
 
-	#region Windows Form Designer generated code
-	/// <summary>
-	/// Required method for Designer support - do not modify
-	/// the contents of this method with the code editor.
-	/// </summary>
-	private void InitializeComponent() {
+        #region Windows Form Designer generated code
+        /// <summary>
+        /// Required method for Designer support - do not modify
+        /// the contents of this method with the code editor.
+        /// </summary>
+        private void InitializeComponent() {
 	    this.components = new System.ComponentModel.Container();
 	    System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(UploadExpress));
-	    this.mainMenu1 = new System.Windows.Forms.MainMenu(this.components);
+	    this.mainMenu1 = new MainMenu(this.components);
 	    this.menuFile = new System.Windows.Forms.MenuItem();
 	    this.menuNew = new System.Windows.Forms.MenuItem();
 	    this.menuImport = new System.Windows.Forms.MenuItem();
@@ -402,16 +514,6 @@ namespace UploadExpress
 
 	}
 	#endregion
-
-	/// <summary>
-	/// The main entry point for the application.
-	/// </summary>
-	[STAThread]
-	static void Main() {
-	    // Should catch all stray exception here. XXX
-	    Application.Run(new UploadExpress());
-	}
-
 	#region MenuActions
 	//
 	// Invoke the properties dialog
@@ -436,17 +538,20 @@ namespace UploadExpress
 	// Select an Event, then create a new UploadView for that event.
 	//
 	private void menuNew_Click(object sender, System.EventArgs e) {
-	    if (currentAccount == null) {
-		MessageBox.Show("Please use File -> Account to setup your DigiProofs Account.",
-		    "UploadExpress",
-		    MessageBoxButtons.OK,
-		    MessageBoxIcon.Error);
-		return;
+            Console.WriteLine("checking");
+	    if (CurrentAccount == null) {
+                InitialAccount initialAccountDialog = new InitialAccount();
+                Console.WriteLine("Showing dialog");
+                initialAccountDialog.ShowDialog();
+                if (initialAccountDialog.DialogResult == DialogResult.OK) {
+                    Console.WriteLine("got dialog");
+                }
+                return;
 	    }
 	    try {
-		if (currentAccount.Session.EventList.Length == 0) {
+		if (CurrentAccount.Session.EventList.Length == 0) {
 		    MessageBox.Show("You have no events available for uploading in this account." + Environment.NewLine +
-			"Please log into your account and purchase a new event for this upload.",
+			"Please log into your account and create a new event for this upload.",
 			"UploadExpress",
 			MessageBoxButtons.OK,
 			MessageBoxIcon.Error);
@@ -456,7 +561,7 @@ namespace UploadExpress
 	    catch (SessionException ex) {
 		switch (ex.Error) {
 		    case SessionError.LoginFail:
-			MessageBox.Show("Couldn't log into " + currentAccount.Email + "." + Environment.NewLine + "Please check your email and password.",
+			MessageBox.Show("Couldn't log into " + CurrentAccount.Email + "." + Environment.NewLine + "Please check your email and password.",
 			    "UploadExpress",
 			    MessageBoxButtons.OK,
 			    MessageBoxIcon.Error);
@@ -472,12 +577,12 @@ namespace UploadExpress
 	    }
 
 
-	    EventChooser chooseEvent = new EventChooser(new ArrayList(currentAccount.Session.EventList));
+	    EventChooser chooseEvent = new EventChooser(new ArrayList(CurrentAccount.Session.EventList));
 	    chooseEvent.ShowDialog();
 	    if (chooseEvent.DialogResult == DialogResult.OK) {
 		Event ev = chooseEvent.GetSelectedEvent();
-		UploadSet uploadSet = new UploadSet(dataDirPath, ev.eventID, ev.title, this, currentAccount.Email);
-		currentAccount.UploadSetList.Add(uploadSet);
+		UploadSet uploadSet = new UploadSet(dataDirPath, ev.event_id, ev.title, this, CurrentAccount.Email);
+		CurrentAccount.UploadSetList.Add(uploadSet);
 		treeView1.BeginUpdate();
 		treeView1.Nodes.Add(uploadSet.node);
 		treeView1.SelectedNode = uploadSet.node;
@@ -497,10 +602,10 @@ namespace UploadExpress
 	// Try to provide some help.
 	//
 	private void menuHelp_Click(object sender, System.EventArgs e) {
-	    if (currentAccount == null)
+	    if (CurrentAccount == null)
 		Process.Start("http://www.digiproofs.com/UploaderHelp.pdf");
 	    else
-		Process.Start("http://" + currentAccount.Server + "/UploaderHelp.pdf");
+		Process.Start("http://" + CurrentAccount.Server + "/UploaderHelp.pdf");
 	}
 
 
@@ -508,7 +613,7 @@ namespace UploadExpress
 	// Import new pages and images into the selected uploadset.
 	//
 	private void menuImport_Click(object sender, System.EventArgs e) {
-	    if (currentAccount == null) {
+	    if (CurrentAccount == null) {
 		MessageBox.Show("Please use File -> Account to setup your DigiProofs Account.",
 		    "UploadExpress",
 		    MessageBoxButtons.OK,
@@ -526,32 +631,33 @@ namespace UploadExpress
 	    }
 	    while (node.Parent != null)
 		node = node.Parent;
-	    string path = ((UploadSet)node.Tag).Import(this.currentAccount.SelectedPath);
+	    string path = ((UploadSet)node.Tag).Import(this.CurrentAccount.SelectedPath);
 	    if (path != null) {
-		currentAccount.SelectedPath = path;	// Save current selected path
-		accounts.Serialize();
+		CurrentAccount.SelectedPath = path;	// Save current selected path
+		accounts.SaveAccounts();
 	    }
 	}
 
 	private void start_Click(object sender, System.EventArgs e) {
-	    if (currentAccount.Upload == null) {
-		currentAccount.Upload = new Upload();
+	    if (CurrentAccount.Upload == null) {
+		CurrentAccount.Upload = new Upload();
 	    }
-	    Upload upload = currentAccount.Upload;
+	    Upload upload = CurrentAccount.Upload;
 	    if (upload.Uploading()) {
 		upload.Show();
 		upload.BringToFront();
 		return;
 	    }
-	    if (upload.Setup(currentAccount))
-		upload.Next();		// Start the upload
+	    if (upload.Setup(CurrentAccount))
+               Task.Run(() => upload.Next());  // Start a new upload task
+                //upload.Next();		// Start the upload
 	}
 
 	// 
 	// Refresh the login for the current account.
 	//
 	private void menuRefresh_Click(object sender, System.EventArgs e) {
-	    if (currentAccount == null) {
+	    if (CurrentAccount == null) {
 		MessageBox.Show("Please use File -> Account to setup your DigiProofs Account.",
 		    "UploadExpress",
 		    MessageBoxButtons.OK,
@@ -559,13 +665,13 @@ namespace UploadExpress
 		return;
 	    }
 	    try {
-		statusBar1.Text = "Logging into " + currentAccount.Email;
-		currentAccount.Session.Login();
-		statusBar1.Text = "Logged in as " + currentAccount.Email;
+		statusBar1.Text = "Logging into " + CurrentAccount.Email;
+		// XXX  CurrentAccount.Session.Login();
+		statusBar1.Text = "Logged in as " + CurrentAccount.Email;
 	    }
 	    catch (WebException ex) {
 		if ((int)((HttpWebResponse)ex.Response).StatusCode == 400) {
-		    MessageBox.Show("Couldn't log into " + currentAccount.Email + ".  Please check your email and password.",
+		    MessageBox.Show("Couldn't log into " + CurrentAccount.Email + ".  Please check your email and password.",
 			"UploadExpress",
 			MessageBoxButtons.OK,
 			MessageBoxIcon.Error);
@@ -585,14 +691,14 @@ namespace UploadExpress
 	// Show the log for the current Session.
 	//
 	private void menuLog_Click(object sender, System.EventArgs e) {
-	    if (currentAccount == null) {
+	    if (CurrentAccount == null) {
 		MessageBox.Show("Please use File -> Account to setup your DigiProofs Account.",
 		    "UploadExpress",
 		    MessageBoxButtons.OK,
 		    MessageBoxIcon.Error);
 		return;
 	    }
-	    new LogViewer(currentAccount.Session.GetLogs()).Show();
+	    new LogViewer(Log.ToString()).Show();
 	}
 
 	#endregion
@@ -606,13 +712,13 @@ namespace UploadExpress
 	// Called when some other function causes a change in the account list.
 	// We want to reload the account list combo box on the tool bar here.
 	// We need to make sure that appropriate Account is still selected.
-	// If the currentAccount is set and still exists in the account list,
+	// If the CurrentAccount is set and still exists in the account list,
 	// leave that one selected.  Otherwise, use the default Object.
 	private void accountListChanged(object sender, System.EventArgs e) {
 	    AccountList accounts = (AccountList)sender;
 	    Account selectedAccount = null;	    // Which account should be selected
 	    foreach (Account acct in accounts) {
-		if (acct == currentAccount) {
+		if (acct == CurrentAccount) {
 		    selectedAccount = acct;
 		    break;
 		}
@@ -627,72 +733,22 @@ namespace UploadExpress
 		accountList1.SelectedItem = selectedAccount;
 	}
 
-        private void accountList1_SelectedIndexChanged(object sender, System.EventArgs e) {
-	    currentAccount = (Account)accountList1.SelectedItem;
-	    if (currentAccount == null) {
+        private async void accountList1_SelectedIndexChanged(object sender, System.EventArgs e) {
+	    CurrentAccount = (Account)accountList1.SelectedItem;
+	    if (CurrentAccount == null) {
 		statusBar1.Text = "Not logged in";
 	    }
 	    else {
-		Cursor.Current = Cursors.WaitCursor;
-		treeView1.Nodes.Clear();
-		// Need to do a lot with error checking here.
-		try {
-		    statusBar1.Text = "Logging into " + currentAccount.Email;
-		    if (!currentAccount.Session.LoggedIn)	// This may try to login twice (on error)
-			currentAccount.Session.Login();
-		    statusBar1.Text = "Logged in as " + currentAccount.Email;
-		}
-		catch (SessionException ex) {
-		    switch (ex.Error) {
-			case SessionError.LoginFail:
-			    MessageBox.Show("Couldn't log into " + currentAccount.Email + "." + Environment.NewLine + "Please check your email and password.",
-				"UploadExpress",
-				MessageBoxButtons.OK,
-				MessageBoxIcon.Error);
-			    statusBar1.Text = "Login Failed";
-			    break;
-			case SessionError.NetworkError:
-			    MessageBox.Show("Connection Error: Couldn't connect to the DigiProofs uploaders." + 
-					    Environment.NewLine + 
-					    "Please make sure your computer is connected to the internet." +
-					    Environment.NewLine +
-					    "If the problem persists, please contact DigiProofs support (support@digiproofs.com).",
-				"UploadExpress",
-				MessageBoxButtons.OK,
-				MessageBoxIcon.Error);
-				statusBar1.Text = "Connection Failed";
-			    break;
-			case SessionError.ServerError:
-			    MessageBox.Show("Server Error: An error occurred on the DigiProofs uploaders." + 
-					    Environment.NewLine + 
-					    "Please try restarting this application." +
-					    Environment.NewLine +
-					    "If the problem persists, please contact DigiProofs support (support@digiproofs.com).",
-				"UploadExpress",
-				MessageBoxButtons.OK,
-				MessageBoxIcon.Error);
-			    statusBar1.Text = "Server Error";
-			    break;
-			case SessionError.UnknownSoapError:
-			    MessageBox.Show("Connection Error: Couldn't log into DigiProofs Upload Service." + Environment.NewLine + "Error: " + ex.Message,
-				"UploadExpress",
-				MessageBoxButtons.OK,
-				MessageBoxIcon.Error);
-			    statusBar1.Text = "Login Error";
-			    break;
-			default:
-			    MessageBox.Show("Unexpected Error - Could not log in:" + Environment.NewLine + "Error: " + ex.Message,
-				"UploadExpress",
-				MessageBoxButtons.OK,
-				MessageBoxIcon.Error);
-			    statusBar1.Text = "Login Error";
-			    break;
-		    }
-		}
+                log.Add(new LogEntry(String.Format("Selected Account changed to {0}", CurrentAccount.Email), ""));
+                Cursor.Current = Cursors.WaitCursor;
+
+                treeView1.Nodes.Clear();
+                await LoginAsync(CurrentAccount);
+
 		// now populate the UploadSetList
-		if (currentAccount.UploadSetList == null)
-		    currentAccount.RefreshUploadSets(this, dataDirPath);
-		foreach (UploadSet uploadSet in currentAccount.UploadSetList) {
+		if (CurrentAccount.UploadSetList == null)
+		    CurrentAccount.RefreshUploadSets(this, dataDirPath);
+		foreach (UploadSet uploadSet in CurrentAccount.UploadSetList) {
 		    treeView1.Nodes.Add(uploadSet.node);
 		}
 		Cursor.Current = Cursors.Arrow;
@@ -709,7 +765,7 @@ namespace UploadExpress
 			MessageBoxButtons.OK,
 			MessageBoxIcon.Error);
 		}
-		currentAccount.UploadSetList.Remove((UploadSet)(contextNode.Tag));
+		CurrentAccount.UploadSetList.Remove((UploadSet)(contextNode.Tag));
 		treeView1.EndUpdate();
 	    }
 	}
@@ -745,9 +801,9 @@ namespace UploadExpress
 	//
 	private void menuPurge_Click(object sender, System.EventArgs e) {
 	    treeView1.BeginUpdate();
-	    foreach (UploadSet uploadSet in currentAccount.UploadSetList.ToArray()) {
+	    foreach (UploadSet uploadSet in CurrentAccount.UploadSetList.ToArray()) {
 		if (uploadSet.Status == UploadStatus.Complete) {
-		    currentAccount.UploadSetList.Remove(uploadSet);
+		    CurrentAccount.UploadSetList.Remove(uploadSet);
 		    uploadSet.Delete();
 		}
 	    }
@@ -770,5 +826,63 @@ namespace UploadExpress
 		contextMenu1.MenuItems.Add(DeleteImage);
 	    }
 	}
+    }
+
+    // Main has been refactored here as per: https://msdn.microsoft.com/en-us/magazine/mt620013.aspx
+    public class Start1 {
+        [STAThread]
+        static void Main() {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+
+            Start1 p = new Start1();
+            p.ExitRequested += p_ExitRequested;
+            Task programStart = p.StartAsync();
+            HandleExceptions(programStart);
+
+            Application.Run();
+        }
+
+        private static async void HandleExceptions(Task task) {
+            try {
+                await Task.Yield(); //ensure this runs as a continuation
+                await task;
+            }
+            catch (Exception ex) {
+                //deal with exception, either with message box
+                //or delegating to general exception handling logic you may have wired up 
+                //e.g. to Application.ThreadException and AppDomain.UnhandledException
+                MessageBox.Show(ex.ToString());
+
+                Application.Exit();
+            }
+        }
+
+        static void p_ExitRequested(object sender, EventArgs e) {
+            Application.ExitThread();
+        }
+
+        private readonly UploadExpress m_mainForm;
+        private Start1() {
+            m_mainForm = new UploadExpress();
+            m_mainForm.FormClosed += m_mainForm_FormClosed;
+        }
+
+        public async Task StartAsync() {
+            await m_mainForm.InitializeAsync();
+            m_mainForm.Show();
+
+        }
+
+        public event EventHandler<EventArgs> ExitRequested;
+        void m_mainForm_FormClosed(object sender, FormClosedEventArgs e) {
+            OnExitRequested(EventArgs.Empty);
+        }
+
+        protected virtual void OnExitRequested(EventArgs e) {
+            if (ExitRequested != null)
+                ExitRequested(this, e);
+        }
     }
 }

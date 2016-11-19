@@ -1,36 +1,47 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Formatters.Soap;
 using System.Windows.Forms;
-using DigiProofs.SoapUpload;
+using DigiProofs.JSONUploader;
+using Newtonsoft.Json;
 
 
 namespace UploadExpress {
+
     /// <summary>
-    /// Summary description for Class1.
+    /// Information for an account that the user can use to log in and upload to.
+    /// We provide for multiple accounts since some pros use both self and fulfillment accounts.
+    /// In addition, it's nice for testing.
     /// </summary>
-    [Serializable]
-    public class Account : ListViewItem, ISerializable {
+    /// 
+
+    // The JsonObject and JsonProperty properties are used to limit serialization to specific
+    // properties.  If the ListViewItem base class gets involved, serialization gets trashed.
+    [JsonObject(MemberSerialization.OptIn)]
+    public class Account : ListViewItem {
+        [JsonProperty]
 	public string Server {
 	    get {return server;}
 	    set {server = value;}
 	}
 	private string server;
 
-	public string Email {
+        [JsonProperty]
+        public string Email {
 	    get {return this.Text;}
 	    set {this.Text = value;}
 	}
 
-	public string Password {
-	    get {return password;}
-	    set {password = value;}
-	}
-	private string password;
+        [JsonProperty]
+        public string Token {
+            get { return uploadToken; }
+            set { uploadToken = value; }
+        }
+        private string uploadToken;
 
-	public int MaxPageImages {
+        [JsonProperty]
+        public int MaxPageImages {
 	    get {return maxPageImages;}
 	    set {maxPageImages = value;}
 	}
@@ -41,26 +52,30 @@ namespace UploadExpress {
 	    CreateDate = 1,
 	    Unsorted = 2,
 	}
-	public SortOrders SortOrder {
+        [JsonProperty]
+        public SortOrders SortOrder {
 	    get {return sortOrder;}
 	    set {sortOrder = value;}
 	}
 	private SortOrders sortOrder;
 
-	public bool UseCompression {
-	    get {return compression;}
+        [JsonProperty]
+        public bool UseCompression {
+	    get { return compression;}
 	    set {compression = value;}
 	}
 	private bool compression;
 
-	public int CompressionRate {
-	    get {return compressionRate;}
+        [JsonProperty]
+        public int CompressionRate {
+	    get { return compressionRate; }
 	    set {compressionRate = value;}
 	}
 	private int compressionRate;
 
-	public bool IsDefault {
-	    get {return isDefault;}
+        [JsonProperty]
+        public bool IsDefault {
+	    get { return isDefault; }
 	    set {
 		isDefault = value;
 		if (isDefault) {
@@ -79,102 +94,69 @@ namespace UploadExpress {
 	}
 	private bool isDefault;
 
-	public bool ProxyOn {
+        [JsonProperty]
+        public bool ProxyOn {
 	    get {return proxyOn;}
 	    set {proxyOn = value;}
 	}
 	private bool proxyOn;
 
-	public string ProxyHost {
+        [JsonProperty]
+        public string ProxyHost {
 	    get {return proxyHost;}
 	    set {proxyHost = value;}
 	}
 	private String proxyHost;
 
-	public int ProxyPort {
+        [JsonProperty]
+        public int ProxyPort {
 	    get {return proxyPort;}
 	    set {proxyPort = value;}
 	}
 	private int proxyPort;
 
-	public bool ForceHTTP10 {
-	    get {return forceHTTP10;}
-	    set {forceHTTP10 = value;}
-	}
-	private bool forceHTTP10;
-
-	public string SelectedPath {
+        [JsonProperty]
+        public string SelectedPath {
 	    get {return _selectedPath;}
 	    set {_selectedPath = value;}
 	}
 	private string _selectedPath;
 
-	public Upload Upload {
+        public Upload Upload {
 	    get {return UploadSession;}
 	    set {UploadSession = value;}
 	}
 	private Upload UploadSession;
 
-	public ArrayList UploadSetList {
+        public ArrayList UploadSetList {
 	    get {return uploadSets;}
 	    set {uploadSets = value;}
 	}
 	private ArrayList uploadSets;
 
-	public NetSession Session {
+        public NetSession Session {
 	    get {
-		string proxy = null;
-		if (proxyOn)
-		    proxy = proxyHost + ":" + proxyPort.ToString();
-		if (session == null)
-		    session = new NetSession(server, this.Text, password, proxy, forceHTTP10);
-		return session;
-	    }
+                return session;
+            }
+            set { session = value; }
 	}
 	private NetSession session;
 
-	// Used to create a default properties object
-	public Account() {
+        /// <summary>
+        /// Create a new Account with default values.
+        /// </summary>
+        public Account() {
 	    maxPageImages = 50;
 	    sortOrder = SortOrders.Name;
 	    compression = true;
 	    compressionRate = 80;
-	    server = "u.digiproofs.com";
+	    server = "cdev.digiproofs.com";
 	    proxyOn = false;
-	}
+        }
 
-	protected Account(SerializationInfo info, StreamingContext context) {
-	    server = info.GetString("s");
-	    this.Text = info.GetString("e");
-	    password = info.GetString("p");
-	    maxPageImages = info.GetInt32("m");
-	    sortOrder = (SortOrders)info.GetInt32("so");
-	    compression = info.GetBoolean("c");
-	    compressionRate = info.GetInt32("r");
-	    IsDefault = info.GetBoolean("d");
-	    proxyOn = info.GetBoolean("p1");
-	    proxyHost = info.GetString("p2");
-	    proxyPort = info.GetInt32("p3");
-	    forceHTTP10 = info.GetBoolean("H10");
-	    _selectedPath = info.GetString("sp");
-	}
-
-	//[SecurityPermissionAttribute(SecurityAction.Demand,SerializationFormatter=true)]
-	public virtual void GetObjectData(SerializationInfo info, StreamingContext context) {
-	    info.AddValue("s", server);
-	    info.AddValue("e", this.Text);
-	    info.AddValue("p", password);
-	    info.AddValue("m", maxPageImages);
-	    info.AddValue("so", (int)sortOrder);
-	    info.AddValue("c", compression);
-	    info.AddValue("r", compressionRate);
-	    info.AddValue("d", isDefault);
-	    info.AddValue("p1", proxyOn);
-	    info.AddValue("p2", proxyHost);
-	    info.AddValue("p3", proxyPort);
-	    info.AddValue("H10", forceHTTP10);
-	    info.AddValue("sp", _selectedPath);
-	}
+        public Account(string email) : this() {
+            this.Email = email;
+        }
 
 	public void RefreshUploadSets(UploadExpress context, string dataDirPath) {
 	    uploadSets = new ArrayList();
@@ -189,7 +171,7 @@ namespace UploadExpress {
 			// Limit to events currently in the session eventlist.  Some old
 			// ones may have expired.
 			foreach (Event ev2 in Session.EventList) {
-			    if (ev2.eventID == uploadSet.eventID) {
+			    if (ev2.event_id == uploadSet.eventID) {
 				ev = ev2;
 				break;
 			    }
@@ -210,11 +192,9 @@ namespace UploadExpress {
 	}
     }
     
-    [Serializable]
-    public class AccountList : ArrayList {
+    public class AccountList : List<Account> {
 	public delegate void AccountListChangedHandler(object uploadSet, EventArgs e);
 	public event AccountListChangedHandler AccountListChanged;
-	private string prefPath;
 
 	public Account DefaultAccount {
 	    get {
@@ -229,71 +209,78 @@ namespace UploadExpress {
 		    if (acct.IsDefault)
 			acct.IsDefault = false;
 		value.IsDefault = true;
-		this.Serialize();
+		this.SaveAccounts();
 		if (AccountListChanged != null)
 		    AccountListChanged(this, EventArgs.Empty);
 	    }
 	}
 
-	public AccountList(string prefPath) {   
-	    this.prefPath = prefPath;
+	public AccountList() {
 	}
 
-	public void Add(Account acct) {
+        /// <summary>
+        /// Add a (newly created) account to the Account list.
+        /// </summary>
+	public new void Add(Account acct) {
 	    base.Add(acct);
-	    if (this.Count == 1)
+            string jsonAccount = JsonConvert.SerializeObject(acct);
+            if (this.Count == 1)
 		acct.IsDefault = true;
-	    this.Serialize();
+	    this.SaveAccounts();
 	    if (AccountListChanged != null)
 		AccountListChanged(this, EventArgs.Empty);
 	}
-	
-	public void Remove(Account acct) {
+
+        /// <summary>
+        /// Remove an account from the account list.
+        /// </summary>
+        public new void Remove(Account acct) {
 	    base.Remove(acct);
 	    if (acct.IsDefault && this.Count != 0) {
 		((Account)this[0]).IsDefault = true;
 	    }
-	    this.Serialize();
+	    this.SaveAccounts();
 	    if (AccountListChanged != null)
 		AccountListChanged(this, EventArgs.Empty);
 	}
 
 	// Some change has occured and we want to refresh the Account list.
 	public void Refresh() {
-	    this.Serialize();
+	    this.SaveAccounts();
 	    if (AccountListChanged != null)
 		AccountListChanged(this, EventArgs.Empty);
 	}
 
-	public void Serialize() {
-	    Delegate[] list = null;
-	    if (AccountListChanged != null) {
-		list = AccountListChanged.GetInvocationList();
-		foreach (AccountListChangedHandler del in list) {
-		    AccountListChanged -= del;
-		}
-	    }
-	    FileStream cfgStrm = new FileStream(prefPath, FileMode.Create);
-	    SoapFormatter fmtr = new SoapFormatter();
-	    fmtr.Serialize(cfgStrm, this);
-	    cfgStrm.Close();
-	    if (list != null) {
-		foreach (AccountListChangedHandler del in list) {
-		    AccountListChanged += del;
-		}
-	    }
-	}
-	
-	public static AccountList GetAccounts(string prefPath) {
-	    FileStream cfgStrm = new FileStream(prefPath, FileMode.Open);
-	    SoapFormatter fmtr = new SoapFormatter();
-	    try {
-		AccountList ret = (AccountList)fmtr.Deserialize(cfgStrm);
-		return ret;
-	    }
-	    finally {
-		cfgStrm.Close();
-	    }
+        /// <summary>
+        /// Save the current set of accounts to the application properties.
+        /// </summary>
+	public void SaveAccounts () {
+            try {
+                string jsonAccountList = JsonConvert.SerializeObject(this);
+                Properties.Settings.Default.accounts = jsonAccountList;
+                Properties.Settings.Default.Save();
+            }
+            catch {
+                Console.WriteLine("Error in SaveAccounts");
+            }
+        }
+
+        /// <summary>
+        /// Read the initial set of accounts from the application properties.
+        /// </summary>
+        public static AccountList GetAccounts() {
+            try {
+                string jsonAccountList = Properties.Settings.Default.accounts;
+                if (jsonAccountList == null || jsonAccountList.Length == 0) {
+                    return new AccountList();
+                }
+                AccountList accountList = JsonConvert.DeserializeObject<AccountList>(jsonAccountList);               
+                return accountList;
+            }
+            catch {
+                Console.WriteLine("Error in GetAccounts");
+            }
+            return new AccountList();
 	}
     }
 }

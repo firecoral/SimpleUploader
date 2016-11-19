@@ -97,8 +97,7 @@ namespace UploadExpress
 		this.label1.Name = "label1";
 		this.label1.Size = new System.Drawing.Size(272, 40);
 		this.label1.TabIndex = 4;
-		this.label1.Text = "For information about or assistance with this product please contact DigiProofs a" +
-		    "t support@digiproofs.com or 650-691-4040.";
+		this.label1.Text = "For information about or assistance with this product please contact DigiProofs at support@digiproofs.com";
 		// 
 		// About
 		// 

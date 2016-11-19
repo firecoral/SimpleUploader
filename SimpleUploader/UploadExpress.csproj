@@ -28,7 +28,7 @@
     </FileUpgradeFlags>
     <UpgradeBackupLocation>
     </UpgradeBackupLocation>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <OldToolsVersion>4.0</OldToolsVersion>
     <TargetFrameworkProfile>
     </TargetFrameworkProfile>
@@ -110,6 +110,10 @@
     <SignAssembly>false</SignAssembly>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=9.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.9.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System">
       <Name>System</Name>
     </Reference>
@@ -146,6 +150,18 @@
     <Compile Include="ChooseEvent.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="AccountPassword.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="AccountPassword.Designer.cs">
+      <DependentUpon>AccountPassword.cs</DependentUpon>
+    </Compile>
+    <Compile Include="InitialAccount.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="InitialAccount.Designer.cs">
+      <DependentUpon>InitialAccount.cs</DependentUpon>
+    </Compile>
     <Compile Include="LogViewer.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -179,6 +195,12 @@
       <DependentUpon>ChooseEvent.cs</DependentUpon>
       <SubType>Designer</SubType>
     </EmbeddedResource>
+    <EmbeddedResource Include="AccountPassword.resx">
+      <DependentUpon>AccountPassword.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="InitialAccount.resx">
+      <DependentUpon>InitialAccount.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="LogViewer.resx">
       <DependentUpon>LogViewer.cs</DependentUpon>
       <SubType>Designer</SubType>
@@ -194,6 +216,10 @@
     <Content Include="App.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\ClassLibrary1\Logger.csproj">
+      <Project>{6fa96874-cde9-4166-994b-c8845538d098}</Project>
+      <Name>Logger</Name>
+    </ProjectReference>
     <ProjectReference Include="..\SoapUploader\ClassLibrary2\SoapUploader.csproj">
       <Project>{BBE14C66-3B87-41C9-8C93-F54A2DECDFF3}</Project>
       <Name>SoapUploader</Name>
@@ -205,7 +231,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
+    <None Include="ClassDiagram1.cd" />
     <None Include="DigiproofCodeSigning.pfx" />
+    <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>

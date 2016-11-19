@@ -214,7 +214,7 @@ namespace UploadExpress {
 
 	    if (dlg.ShowDialog() == DialogResult.OK) {
 		Console.WriteLine("got directory: {0}", dlg.SelectedPath);
-		AddPage(dlg.SelectedPath, context.GetCurrentAccount().MaxPageImages, context.GetCurrentAccount().SortOrder, true);
+		AddPage(dlg.SelectedPath, context.CurrentAccount.MaxPageImages, context.CurrentAccount.SortOrder, true);
 		AsyncUpdateNodes(true);
 		Status = UploadStatus.Ready;
 		return dlg.SelectedPath;
