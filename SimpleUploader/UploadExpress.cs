@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -233,6 +234,39 @@ namespace UploadExpress
                 MessageBox.Show(message, "UploadExpress", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return null;
             }
+        }
+
+        public void RefreshUploadSets(Account account) {
+            ArrayList uploadSets = new ArrayList();
+            DirectoryInfo dir = new DirectoryInfo(dataDirPath);
+            FileInfo[] files = dir.GetFiles();
+            List<string> uploadFiles = new List<string>();
+            foreach (FileInfo file in files) {
+                try {
+                    uploadFiles.Add(file.FullName);
+                    UploadSet uploadSet = UploadSet.GetUploadSet(file.FullName, this);
+                    // Only show those associated with the current account
+                    if (uploadSet.Email == account.Email) {
+                        Event ev = null;
+                        // Limit to events currently in the session eventlist.  Some old
+                        // ones may have expired.
+                        foreach (Event ev2 in account.Session.EventList) {
+                            if (ev2.event_id == uploadSet.eventID) {
+                                ev = ev2;
+                                break;
+                            }
+                        }
+                        if (ev == null)     // If no event was found
+                            break;
+                        uploadSets.Add(uploadSet);
+                    }
+                }
+                catch {
+                    Console.WriteLine("ERROR Adding set {0}", file.FullName);
+                }
+            }
+            log.Add(new LogEntry("Restoring Cached uploads:", String.Join<string>(Environment.NewLine + "  ", uploadFiles)));
+            account.UploadSetList = uploadSets;
         }
 
         /// <summary>
@@ -747,7 +781,7 @@ namespace UploadExpress
 
 		// now populate the UploadSetList
 		if (CurrentAccount.UploadSetList == null)
-		    CurrentAccount.RefreshUploadSets(this, dataDirPath);
+		    RefreshUploadSets(CurrentAccount);
 		foreach (UploadSet uploadSet in CurrentAccount.UploadSetList) {
 		    treeView1.Nodes.Add(uploadSet.node);
 		}

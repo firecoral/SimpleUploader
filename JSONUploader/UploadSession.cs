@@ -38,6 +38,10 @@ namespace DigiProofs.JSONUploader {
         public int event_id { get; set; }
         public string title { get; set; }
         public List<Page> pages { get; set; }
+
+        public override string ToString() {
+            return title;
+        }
     }
 
     public class EventList {

@@ -158,35 +158,6 @@ namespace UploadExpress {
             this.Email = email;
         }
 
-	public void RefreshUploadSets(UploadExpress context, string dataDirPath) {
-	    uploadSets = new ArrayList();
-	    DirectoryInfo dir = new DirectoryInfo(dataDirPath);
-	    FileInfo[] files = dir.GetFiles();
-	    foreach (FileInfo file in files) {
-		try {
-		    UploadSet uploadSet = UploadSet.GetUploadSet(file.FullName, context);
-		    // Only show those associated with the current account
-		    if (uploadSet.Email == Email) {
-			Event ev = null;
-			// Limit to events currently in the session eventlist.  Some old
-			// ones may have expired.
-			foreach (Event ev2 in Session.EventList) {
-			    if (ev2.event_id == uploadSet.eventID) {
-				ev = ev2;
-				break;
-			    }
-			}
-			if (ev == null)	    // If no event was found
-			    break;
-			uploadSets.Add(uploadSet);
-		    }
-		}
-		catch {
-		    Console.WriteLine("ERROR Adding set {0}", file.FullName);
-		}
-	    }
-	}
-
 	public override string ToString() {
 	    return this.Text;
 	}

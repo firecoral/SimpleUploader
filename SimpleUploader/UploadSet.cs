@@ -4,7 +4,6 @@ using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Soap;
 using System.Windows.Forms;
-using DigiProofs.SoapUpload;
 
 
 namespace UploadExpress {
