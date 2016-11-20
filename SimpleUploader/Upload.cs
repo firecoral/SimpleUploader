@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using DigiProofs.JSONUploader;
@@ -26,18 +25,6 @@ namespace UploadExpress {
 	// in order to report on them at the end of the upload.
 	private int uploadedFiles;
 	private int errorFiles;
-
-	public delegate void ProgressIncrementDelegate(int size);
-	public ProgressIncrementDelegate progressIncrementDelegate;
-	public delegate void UploadStatusDelegate(string eventTitle, string pageTitle, string imageTitle);
-	public UploadStatusDelegate uploadStatusDelegate;
-	public delegate void UploadLogDelegate(string text);
-	public UploadLogDelegate uploadLogDelegate;
-	public delegate void CancelButtonDelegate(bool enabled);
-	public CancelButtonDelegate cancelButtonDelegate;
-
-	public delegate void RemoveUploadsDelegate(int eventID, string reason);
-	public RemoveUploadsDelegate removeUploadsDelegate;
 
 	private System.Windows.Forms.Label label1;
 	private System.Windows.Forms.ProgressBar progressBar1;
@@ -82,26 +69,21 @@ namespace UploadExpress {
 	    }
 	    progressBar1.Maximum = (int)Math.Round(pendingSize / 1024.0);
 	    progressBar1.Value = 0;
-	    progressIncrementDelegate = new ProgressIncrementDelegate(ProgressIncrement);
-	    uploadStatusDelegate = new UploadStatusDelegate(LabelUpdate);
-	    uploadLogDelegate = new UploadLogDelegate(UploadLog);
-	    cancelButtonDelegate = new CancelButtonDelegate(SetCancelButton);
-	    textBox1.Clear();
+            textBox1.Clear();
 	    textBox1.AppendText("Upload Started:" + Environment.NewLine + "\t" + work.Count + " files remaining." + Environment.NewLine);
-	    removeUploadsDelegate = new RemoveUploadsDelegate(RemoveUploads);
 	    cancelling = false;
 	    this.Show();
 	    return true;
 	}
 
 	private void Cleanup(string why, string why2) {
-	    BeginInvoke(uploadStatusDelegate, new object[] {why, why2, ""});  // Clear labels
-	    BeginInvoke(cancelButtonDelegate, new object[] {false});	    // Turn Cancel button off
+	    LabelUpdate(why, why2, "");  // Clear labels
+	    SetCancelButton(false);	    // Turn Cancel button off
 	    string endLog = why + ":" + Environment.NewLine +
 			    "\t" + uploadedFiles + " Files uploaded." + Environment.NewLine +
 			    "\t" + errorFiles + " Files with upload errors." + Environment.NewLine +
 			    ((work.Count > 0) ? "\t" + work.Count + " Files remaining for upload." : "");
-	    BeginInvoke(uploadLogDelegate, new object[] {endLog});	    // Add reason to log
+	    UploadLog(endLog);	    // Add reason to log
 	    cancelling = false;
 	    work.Clear();	// Allow to be restarted.
 	}
@@ -137,7 +119,7 @@ namespace UploadExpress {
         /// Upload the next image in the queue, creating pages as needed.
         /// </summary>
         public async Task Next() {
-	    BeginInvoke(cancelButtonDelegate, new object[] {true});	    // Turn Cancel button on
+	    SetCancelButton(true);	    // Turn Cancel button on
 
 	    WorkUnit workUnit = (WorkUnit)work.Peek();
 	    Image image = workUnit.Image;
@@ -152,7 +134,7 @@ namespace UploadExpress {
                 try {
                     page.pageID = await account.Session.NewPage(uploadSet.eventID, page.title);
                     uploadSet.Serialize();
-                    BeginInvoke(uploadLogDelegate, new object[] { page.title + "- Page Created" });
+                    UploadLog(page.title + "- Page Created");
                 }
                 catch (SessionException ex) {
                     switch (ex.Error) {
@@ -164,7 +146,7 @@ namespace UploadExpress {
                             // abort or ignore this page, but for now, we'll just retry.
                             totalErrors++;
                             contiguousErrors++;
-                            Delay();
+                            await Delay();
                             break;
                     }
                 }
@@ -173,11 +155,7 @@ namespace UploadExpress {
 	    int compression = -1;
 	    if (account.UseCompression)
 		compression = account.CompressionRate;
-	    BeginInvoke(uploadStatusDelegate, new object[] {
-				"Event: " + uploadSet.eventTitle,
-				"Page: " + page.title,
-				"Image: " + image.Title
-			    });
+            LabelUpdate("Event: " + uploadSet.eventTitle, "Page: " + page.title, "Image: " + image.Title);
             try {
                 Stream imageStream = new FileStream(image.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
 
@@ -187,10 +165,10 @@ namespace UploadExpress {
                 work.Dequeue(); // Can now safely remove from queue
                 image.Status = ImageStatus.Uploaded;
                 image.Uploading = false;
-                BeginInvoke(uploadLogDelegate, new object[] { image.FileName + " - Uploaded" });
+                UploadLog(image.FileName + " - Uploaded");
                 uploadSet.Serialize();
                 uploadSet.AsyncUpdateNodes(false);
-                BeginInvoke(progressIncrementDelegate, new object[] { (int)image.Size });
+                ProgressIncrement((int)image.Size);
             }
             catch (SessionException ex) {
                 switch (ex.Error) {
@@ -221,10 +199,8 @@ namespace UploadExpress {
                         uploadSet.AsyncUpdateNodes(true);
                         break;
                     case SessionError.EventExpired:
-                        // Event is full.  Remove all uploads for this event from the queue.
-                        // Use a delegate to execute this since calling RemoveUploads() directly
-                        // appears to be a bad idea.  Use return since RemoveUploads() will call Next().
-                        BeginInvoke(removeUploadsDelegate, new object[] { uploadSet.eventID, " - not uploaded.  Event has expired" });
+                        // Event is expired.  Remove all uploads for this event from the queue.
+                        RemoveUploads(uploadSet.eventID, " - not uploaded.  Event has expired" );
                         return;
                     case SessionError.InvalidImage:
                         // Server didn't like the image.  Mark as error and move on.
@@ -234,10 +210,10 @@ namespace UploadExpress {
                         work.Dequeue();
                         image.Status = ImageStatus.Error;   // Mark file in error
                         image.Uploading = false;
-                        BeginInvoke(uploadLogDelegate, new object[] { image.FileName + " - Server rejected image." });
+                        UploadLog(image.FileName + " - Server rejected image.");
                         uploadSet.Serialize();
                         uploadSet.AsyncUpdateNodes(false);
-                        BeginInvoke(progressIncrementDelegate, new object[] { (int)image.Size });
+                        ProgressIncrement((int)image.Size);
                         break;
                     default:
                         // The only exception we expect to see here is if there is some error with the file, so
@@ -248,11 +224,11 @@ namespace UploadExpress {
                         errorFiles++;
                         image.Status = ImageStatus.Error;       // Mark file in error
                         image.Uploading = false;
-                        BeginInvoke(uploadLogDelegate, new object[] { image.Path + " - File Error" });
+                        UploadLog(image.Path + " - File Error");
                         work.Dequeue();
                         uploadSet.Serialize();
                         uploadSet.AsyncUpdateNodes(false);
-                        BeginInvoke(progressIncrementDelegate, new object[] { (int)image.Size });
+                        ProgressIncrement((int)image.Size);
                         break;
                 }
             }
@@ -263,21 +239,19 @@ namespace UploadExpress {
 	    return (work != null && work.Count > 0);
 	}
 
-	private void Delay() {
+	private async Task Delay() {
 	    int delay = 1 << contiguousErrors;
 	    if (delay > 600)
 		delay = 600;	    // Make sure maximum retry time is 10 minutes.
 	    while (delay > 0 && !cancelling) {
-		BeginInvoke(uploadStatusDelegate, new object[] {"Error", "Retrying in " + delay + " seconds", ""});
-		Thread.Sleep(1000);
+		LabelUpdate("Error", "Retrying in " + delay + " seconds", "");
+                await Task.Delay(1000);
 		delay--;
 	    }
 	}
 
 	// Called to remove uploads from the work queue when they can't be completed for some
 	// major reason.  (Event full or expired).
-	// Apparently this must be invoked on the main thread so we use
-	// a delegate to call it.
 	private void RemoveUploads(int eventID, string reason) {
 	    object[] workUnits = work.ToArray();
 	    work.Clear();
@@ -288,8 +262,8 @@ namespace UploadExpress {
 		else {
 		    workUnit.Image.Uploading = false;
 		    errorFiles++;
-		    BeginInvoke(uploadLogDelegate, new object[] {workUnit.Image.FileName + reason});
-		    BeginInvoke(progressIncrementDelegate, new object[] {(int)workUnit.Image.Size});
+		    UploadLog(workUnit.Image.FileName + reason);
+		    ProgressIncrement((int)workUnit.Image.Size);
 		}
 	    }
 	    // XXX await Next();
@@ -428,8 +402,8 @@ namespace UploadExpress {
 
         private void cancelButton_Click(object sender, System.EventArgs e) {
 	    cancelling = true;
-	    BeginInvoke(cancelButtonDelegate, new object[] {false});	    // Turn Cancel button off
-	    BeginInvoke(uploadStatusDelegate, new object[] {"Cancelling.  Please Wait", "", ""});
+	    SetCancelButton(false);	    // Turn Cancel button off
+	    LabelUpdate("Canceling.  Please Wait", "", "");
 	}
     }
 
