@@ -53,7 +53,7 @@ namespace DigiProofs.JSONUploader {
     }
 
     public class NewPage {
-        public string page_id { get; set; }
+        public int page_id { get; set; }
         public string token { get; set; }
         public string message { get; set; }
         public string max_images { get; set; }
@@ -68,7 +68,7 @@ namespace DigiProofs.JSONUploader {
         public string token { get; set; }
         public string filename { get; set; }
         public string image_id { get; set; }
-        public string page_id { get; set; }
+        public int page_id { get; set; }
     }
 
     // These are the errors that may occur during communication with the upload server.
@@ -279,7 +279,7 @@ namespace DigiProofs.JSONUploader {
             }
         }
 
-        public async Task<string> NewPage(int event_id, string title) {
+        public async Task<int> NewPage(int event_id, string title) {
             try {
                 if (this.uploadToken == null)
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
@@ -339,10 +339,10 @@ namespace DigiProofs.JSONUploader {
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
-            return null;
+            return 0;
         }
 
-        public async Task<string> Upload(string page_id, string filename, Stream image) {
+        public async Task<string> Upload(int page_id, string filename, Stream image) {
             try {
                 if (this.uploadToken == null)
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
@@ -351,7 +351,7 @@ namespace DigiProofs.JSONUploader {
                 multipartFormDataContent.Add(commandContent, "\"command\"");
                 HttpContent tokenContent = new StringContent(this.uploadToken);
                 multipartFormDataContent.Add(tokenContent, "\"token\"");
-                HttpContent page_idContent = new StringContent(page_id);
+                HttpContent page_idContent = new StringContent(page_id.ToString());
                 multipartFormDataContent.Add(page_idContent, "\"page_id\"");
                 StreamContent imageContent = new StreamContent(image);
                 imageContent.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data");

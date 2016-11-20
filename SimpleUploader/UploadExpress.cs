@@ -672,7 +672,7 @@ namespace UploadExpress
 	    }
 	}
 
-	private void start_Click(object sender, System.EventArgs e) {
+	private async void start_Click(object sender, System.EventArgs e) {
 	    if (CurrentAccount.Upload == null) {
 		CurrentAccount.Upload = new Upload();
 	    }
@@ -683,8 +683,7 @@ namespace UploadExpress
 		return;
 	    }
 	    if (upload.Setup(CurrentAccount))
-               Task.Run(() => upload.Next());  // Start a new upload task
-                //upload.Next();		// Start the upload
+               await upload.Process();		// Start the upload loop
 	}
 
 	// 

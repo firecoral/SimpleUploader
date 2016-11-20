@@ -37,7 +37,7 @@ namespace JSONUploaderTest
                 else {
                     int event_id = session.EventList[0].event_id;
                     log.Add(new LogEntry("Testing NewPage", ""));
-                    string page_id = await session.NewPage(event_id, "New Page: Windows Testing");
+                    int page_id = await session.NewPage(event_id, "New Page: Windows Testing");
                     log.Add(new LogEntry(String.Format("Added new page: {0} to event {1}", page_id, event_id), ""));
 
                     log.Add(new LogEntry("Testing Upload", ""));

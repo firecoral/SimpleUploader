@@ -1,11 +1,10 @@
 using System;
-using System.Drawing;
 using System.Collections;
-using System.ComponentModel;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using DigiProofs.SoapUpload;
+using DigiProofs.JSONUploader;
 
 
 namespace UploadExpress {
@@ -107,48 +106,39 @@ namespace UploadExpress {
 	    work.Clear();	// Allow to be restarted.
 	}
 
-	//
-	//
-	public void Next() {
-	    // If cancelling, stop the upload.
-	    if (cancelling) {
-		if (curUploadSet != null)
-		    curUploadSet.UpdateStatus();
-		Cleanup("Upload Cancelled", "");
-		return;
-	    }
-	    // If too many errors have occurred, stop the upload.
-	    if (contiguousErrors > 80 || totalErrors > 300) {
-		if (curUploadSet != null)
-		    curUploadSet.UpdateStatus();
-		Cleanup("Upload Aborted - Too many errors.", "");
-		return;
-	    }
-	    // Although we usually come into this method logged in, if there was a session error followed
-	    // by a failed relogin attempt, we should try to log in again here.
-	    if (account.Session.UploadToken == null) {
-		BeginInvoke(uploadStatusDelegate, new object[] {"Retrying Login", "", ""});
-		try {
-                    // XXX account.Session.GetToken("2081").Wait();  // XXX fetch password
-                    if (account.Session.UploadToken == null)
-                        throw new Exception("Could not login");
-                    contiguousErrors = 0;
-		}
-		catch {
-		    totalErrors++;
-		    contiguousErrors++;
-		    Delay();
-		}
-	    }
+        /// <summary>
+	/// Loop through the uploadSet work queue, doing all the queue tasks.
+	/// </summary>
+        public async Task Process() {
+            while (work.Count > 0) {
+                // If cancelling, stop the upload.
+                if (cancelling) {
+                    if (curUploadSet != null)
+                        curUploadSet.UpdateStatus();
+                    Cleanup("Upload Cancelled", "");
+                    return;
+                }
+                // If too many errors have occurred, stop the upload.
+                if (contiguousErrors > 80 || totalErrors > 300) {
+                    if (curUploadSet != null)
+                        curUploadSet.UpdateStatus();
+                    Cleanup("Upload Aborted - Too many errors.", "");
+                    return;
+                }
+                await Next();
+            }
+            if (curUploadSet != null)
+                curUploadSet.UpdateStatus();
+            Cleanup("Upload Complete", "");
+            return;
+        }
+
+        /// <summary>
+        /// Upload the next image in the queue, creating pages as needed.
+        /// </summary>
+        public async Task Next() {
 	    BeginInvoke(cancelButtonDelegate, new object[] {true});	    // Turn Cancel button on
 
-	    // See if any work remains on the queue.
-	    if (work.Count == 0) {
-		if (curUploadSet != null)
-		    curUploadSet.UpdateStatus();
-		Cleanup("Upload Complete", "");
-		return;
-	    }
 	    WorkUnit workUnit = (WorkUnit)work.Peek();
 	    Image image = workUnit.Image;
 	    Page page = workUnit.Page;
@@ -159,166 +149,118 @@ namespace UploadExpress {
 		curUploadSet = uploadSet;
 	    }
 	    if (page.pageID == 0) {
-                // XXX string page_id = account.Session.NewPage(uploadSet.eventID, page.title).Wait();
-                // XXX account.Session.NewPage(uploadSet.eventID, page.title, "", new DPDoneHandler(this.PageDone), workUnit);
-	    }
-	    else {
-		int compression = -1;
-		if (account.UseCompression)
-		    compression = account.CompressionRate;
-		BeginInvoke(uploadStatusDelegate, new object[] {
-				    "Event: " + uploadSet.eventTitle,
-				    "Page: " + page.title,
-				    "Image: " + image.Title
-				});
-		try {
-		    //XXX account.Session.Upload(page.pageID, image.Path, compression, new DPDoneHandler(this.UploadDone), workUnit);
-		}
-		catch {
-		    // The only exception we expect to see here is if there is some error with the file, so
-		    // there is no point in delaying.  In addition, we may be in the main thread here so
-		    // Thread.Sleep() would be a mistake.
-		    totalErrors++;
-		    contiguousErrors++;
-		    errorFiles++;
-		    image.Status = ImageStatus.Error;	// Mark file in error
-		    image.Uploading = false;
-		    BeginInvoke(uploadLogDelegate, new object[] {image.Path + " - File Error"});
-		    work.Dequeue();
-		    uploadSet.Serialize();
-		    uploadSet.AsyncUpdateNodes(false);
-		    BeginInvoke(progressIncrementDelegate, new object[] {(int)image.Size});
-		    Next();
-		}
-	    }
-	}
+                try {
+                    page.pageID = await account.Session.NewPage(uploadSet.eventID, page.title);
+                    uploadSet.Serialize();
+                    BeginInvoke(uploadLogDelegate, new object[] { page.title + "- Page Created" });
+                }
+                catch (SessionException ex) {
+                    switch (ex.Error) {
+// XXX should check for failed login
+                        case SessionError.NetworkError:     // Retry
+                        case SessionError.ServerError:
+                        case SessionError.UnknownError:
+                            // It's possible that in some of the above cases we want to either
+                            // abort or ignore this page, but for now, we'll just retry.
+                            totalErrors++;
+                            contiguousErrors++;
+                            Delay();
+                            break;
+                    }
+                }
+                return;
+            }
+	    int compression = -1;
+	    if (account.UseCompression)
+		compression = account.CompressionRate;
+	    BeginInvoke(uploadStatusDelegate, new object[] {
+				"Event: " + uploadSet.eventTitle,
+				"Page: " + page.title,
+				"Image: " + image.Title
+			    });
+            try {
+                Stream imageStream = new FileStream(image.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+                image.ImageID = await account.Session.Upload(page.pageID, image.Path, imageStream);
+                contiguousErrors = 0;
+                uploadedFiles++;
+                work.Dequeue(); // Can now safely remove from queue
+                image.Status = ImageStatus.Uploaded;
+                image.Uploading = false;
+                BeginInvoke(uploadLogDelegate, new object[] { image.FileName + " - Uploaded" });
+                uploadSet.Serialize();
+                uploadSet.AsyncUpdateNodes(false);
+                BeginInvoke(progressIncrementDelegate, new object[] { (int)image.Size });
+            }
+            catch (SessionException ex) {
+                switch (ex.Error) {
+                    // XXX Need bad login error handler
+                    case SessionError.NetworkError:     // Retry
+                    case SessionError.ServerError:
+                    case SessionError.UnknownError:
+                        // It's possible that in some of the above cases we want to either
+                        // abort or ignore this page, but for now, we'll just retry.
+                        totalErrors++;
+                        contiguousErrors++;
+                        Delay();
+                        break;
+                    case SessionError.PageFull:
+                        // Page is full.  Create a new page for images remaining on this page.
+                        Page newPage = new Page(page.title);
+                        uploadSet.pageList.Add(newPage);
+                        foreach (Image im in (Image[])work.ToArray()) {
+                            Page oldPage = (Page)im.node.Parent.Tag;
+                            if (oldPage.pageID == page.pageID) {
+                                oldPage.imageList.Remove(im);
+                                oldPage.node.Nodes.Remove(im.node);
+                                newPage.imageList.Add(im);
+                                newPage.node.Nodes.Add(im.node);
+                            }
+                        }
+                        uploadSet.Serialize();
+                        uploadSet.AsyncUpdateNodes(true);
+                        break;
+                    case SessionError.EventExpired:
+                        // Event is full.  Remove all uploads for this event from the queue.
+                        // Use a delegate to execute this since calling RemoveUploads() directly
+                        // appears to be a bad idea.  Use return since RemoveUploads() will call Next().
+                        BeginInvoke(removeUploadsDelegate, new object[] { uploadSet.eventID, " - not uploaded.  Event has expired" });
+                        return;
+                    case SessionError.InvalidImage:
+                        // Server didn't like the image.  Mark as error and move on.
+                        totalErrors++;
+                        contiguousErrors++;
+                        errorFiles++;
+                        work.Dequeue();
+                        image.Status = ImageStatus.Error;   // Mark file in error
+                        image.Uploading = false;
+                        BeginInvoke(uploadLogDelegate, new object[] { image.FileName + " - Server rejected image." });
+                        uploadSet.Serialize();
+                        uploadSet.AsyncUpdateNodes(false);
+                        BeginInvoke(progressIncrementDelegate, new object[] { (int)image.Size });
+                        break;
+                    default:
+                        // The only exception we expect to see here is if there is some error with the file, so
+                        // there is no point in delaying.  In addition, we may be in the main thread here so
+                        // Thread.Sleep() would be a mistake.
+                        totalErrors++;
+                        contiguousErrors++;
+                        errorFiles++;
+                        image.Status = ImageStatus.Error;       // Mark file in error
+                        image.Uploading = false;
+                        BeginInvoke(uploadLogDelegate, new object[] { image.Path + " - File Error" });
+                        work.Dequeue();
+                        uploadSet.Serialize();
+                        uploadSet.AsyncUpdateNodes(false);
+                        BeginInvoke(progressIncrementDelegate, new object[] { (int)image.Size });
+                        break;
+                }
+            }
+            return;
+        }
 
 	public bool Uploading() {
 	    return (work != null && work.Count > 0);
-	}
-
-	public void PageDone(object result, object state, SessionException e) {
-	    WorkUnit workUnit = (WorkUnit)state;
-	    Page page = workUnit.Page;
-	    UploadSet uploadSet = workUnit.UploadSet;
-	    if (e != null) {		    // An exception was passed in
-		switch (e.Error) {
-		    case SessionError.InvalidSession:	    // Attempt to login again.
-			BeginInvoke(uploadStatusDelegate, new object[] {"Retrying Login", "", ""});
-			try {
-			    // XXX account.Session.Login();
-			}
-			catch {
-			    totalErrors++;
-			    contiguousErrors++;
-			    Delay();
-			}
-			break;
-		    case SessionError.NetworkError:	    // Retry
-		    case SessionError.ServerError:
-		    case SessionError.UnknownError:
-		    case SessionError.UnknownSoapError:
-			// It's possible that in some of the above cases we want to either
-			// abort or ignore this page, but for now, we'll just retry.
-			totalErrors++;
-			contiguousErrors++;
-			Delay();
-			break;
-		}
-	    }
-	    else {
-		contiguousErrors = 0;
-		page.pageID = (int)result;
-		uploadSet.Serialize();
-		BeginInvoke(uploadLogDelegate, new object[] {page.title + "- Page Created"});
-	    }
-	    Next();
-	}
-
-	public void UploadDone(object result, object state, SessionException e) {
-	    WorkUnit workUnit = (WorkUnit)state;
-	    Image image = workUnit.Image;
-	    Page page = workUnit.Page;
-	    UploadSet uploadSet = workUnit.UploadSet;
-	    if (e != null) {		    // An exception was passed
-		switch (e.Error) {
-		    case SessionError.InvalidSession:	    // Attempt to login again.
-			BeginInvoke(uploadStatusDelegate, new object[] {"Retrying Login", "", ""});
-			try {
-			    // XXX account.Session.Login();
-			}
-			catch {
-			    totalErrors++;
-			    contiguousErrors++;
-			    Delay();
-			}
-			break;
-		    case SessionError.NetworkError:	    // Retry
-		    case SessionError.ServerError:
-		    case SessionError.UnknownError:
-		    case SessionError.UnknownSoapError:
-			// It's possible that in some of the above cases we want to either
-			// abort or ignore this page, but for now, we'll just retry.
-			totalErrors++;
-			contiguousErrors++;
-			Delay();
-			break;
-		    case SessionError.EventFull:
-			// Event has expired.  Remove all uploads for this event from the queue.
-			// Use a delegate to execute this since calling RemoveUploads() directly
-			// appears to be a bad idea.  Use return since RemoveUploads() will call Next().
-			BeginInvoke(removeUploadsDelegate, new object[] {uploadSet.eventID, " - not uploaded.  Event is full"});
-			return;
-		    case SessionError.PageFull:
-			// Page is full.  Create a new page for images remaining on this page.
-			Page newPage = new Page(page.title);
-			uploadSet.pageList.Add(newPage);
-			foreach (Image im in (Image[])work.ToArray()) {
-			    Page oldPage = (Page)im.node.Parent.Tag;
-			    if (oldPage.pageID == page.pageID) {
-				oldPage.imageList.Remove(im);
-				oldPage.node.Nodes.Remove(im.node);
-				newPage.imageList.Add(im);
-				newPage.node.Nodes.Add(im.node);
-			    }
-			}
-			uploadSet.Serialize();
-			uploadSet.AsyncUpdateNodes(true);
-			break;
-		    case SessionError.EventExpired:
-			// Event is full.  Remove all uploads for this event from the queue.
-			// Use a delegate to execute this since calling RemoveUploads() directly
-			// appears to be a bad idea.  Use return since RemoveUploads() will call Next().
-			BeginInvoke(removeUploadsDelegate, new object[] {uploadSet.eventID, " - not uploaded.  Event has expired"});
-			return;
-		    case SessionError.InvalidImage:
-			// Server didn't like the image.  Mark as error and move on.
-			totalErrors++;
-			contiguousErrors++;
-			errorFiles++;
-			work.Dequeue();
-			image.Status = ImageStatus.Error;	// Mark file in error
-			image.Uploading = false;
-			BeginInvoke(uploadLogDelegate, new object[] {image.FileName + " - Server rejected image."});
-			uploadSet.Serialize();
-			uploadSet.AsyncUpdateNodes(false);
-			BeginInvoke(progressIncrementDelegate, new object[] {(int)image.Size});
-			break;
-		}
-	    }
-	    else {
-		contiguousErrors = 0;
-		uploadedFiles++;
-		work.Dequeue();	// Can now safely remove from queue
-		image.ImageID = (string)result;
-		image.Status = ImageStatus.Uploaded;
-		image.Uploading = false;
-		BeginInvoke(uploadLogDelegate, new object[] {image.FileName + " - Uploaded"});
-		uploadSet.Serialize();
-		uploadSet.AsyncUpdateNodes(false);
-		BeginInvoke(progressIncrementDelegate, new object[] {(int)image.Size});
-	    }
-	    Next();
 	}
 
 	private void Delay() {
@@ -350,7 +292,7 @@ namespace UploadExpress {
 		    BeginInvoke(progressIncrementDelegate, new object[] {(int)workUnit.Image.Size});
 		}
 	    }
-	    Next();
+	    // XXX await Next();
 	}
 
 	private void ProgressIncrement(int size) {
