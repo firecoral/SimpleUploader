@@ -105,10 +105,7 @@ namespace UploadExpress {
 	    DirectoryInfo dir = new DirectoryInfo(path);
 	    Console.WriteLine("Adding directory: {0}", path);
 	    ArrayList files = new ArrayList();
-	    // Can this search pattern be extended to include tif? XXX
 	    files.AddRange(dir.GetFiles("*.jpg"));
-	    files.AddRange(dir.GetFiles("*.tif"));
-	    files.AddRange(dir.GetFiles("*.psd"));
 	    DirectoryInfo[] dirs = dir.GetDirectories();
 	    if (files.Count == 0 && dirs.Length == 0) {
 		// XXX Error message (Probably not due to recursion)

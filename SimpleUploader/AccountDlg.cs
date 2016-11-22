@@ -19,9 +19,6 @@ namespace UploadExpress
         private System.Windows.Forms.NumericUpDown images;
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.Label label4;
-	private System.Windows.Forms.CheckBox compression;
-	private System.Windows.Forms.TrackBar amount;
-	private System.Windows.Forms.Label amountVal;
 	private bool tab2shown;
 
 	/// <summary>
@@ -36,8 +33,12 @@ namespace UploadExpress
         private System.Windows.Forms.CheckBox proxyOn;
         private System.Windows.Forms.TextBox proxyHost;
         private System.Windows.Forms.TextBox proxyPort;
+        private GroupBox groupBox2;
+        private TrackBar amount;
+        private CheckBox compression;
+        private Label amountVal;
 
-	public Account Account {
+        public Account Account {
 	    get {return acct;}
 	}
 	private Account acct;
@@ -138,23 +139,25 @@ namespace UploadExpress
             this.email = new System.Windows.Forms.TextBox();
             this.label1 = new System.Windows.Forms.Label();
             this.tabPage2 = new System.Windows.Forms.TabPage();
-            this.amountVal = new System.Windows.Forms.Label();
-            this.amount = new System.Windows.Forms.TrackBar();
-            this.compression = new System.Windows.Forms.CheckBox();
             this.label3 = new System.Windows.Forms.Label();
             this.server = new System.Windows.Forms.TextBox();
+            this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.amount = new System.Windows.Forms.TrackBar();
+            this.compression = new System.Windows.Forms.CheckBox();
+            this.amountVal = new System.Windows.Forms.Label();
             this.tab.SuspendLayout();
             this.tabPage1.SuspendLayout();
             this.groupBox1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.images)).BeginInit();
             this.tabPage2.SuspendLayout();
+            this.groupBox2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.amount)).BeginInit();
             this.SuspendLayout();
             // 
             // ok_btn
             // 
             this.ok_btn.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.ok_btn.Location = new System.Drawing.Point(248, 454);
+            this.ok_btn.Location = new System.Drawing.Point(248, 547);
             this.ok_btn.Name = "ok_btn";
             this.ok_btn.Size = new System.Drawing.Size(75, 23);
             this.ok_btn.TabIndex = 0;
@@ -164,7 +167,7 @@ namespace UploadExpress
             // cancel_btn
             // 
             this.cancel_btn.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.cancel_btn.Location = new System.Drawing.Point(344, 454);
+            this.cancel_btn.Location = new System.Drawing.Point(344, 547);
             this.cancel_btn.Name = "cancel_btn";
             this.cancel_btn.Size = new System.Drawing.Size(75, 23);
             this.cancel_btn.TabIndex = 1;
@@ -177,12 +180,13 @@ namespace UploadExpress
             this.tab.Location = new System.Drawing.Point(8, 24);
             this.tab.Name = "tab";
             this.tab.SelectedIndex = 0;
-            this.tab.Size = new System.Drawing.Size(432, 399);
+            this.tab.Size = new System.Drawing.Size(432, 502);
             this.tab.TabIndex = 2;
             this.tab.KeyDown += new System.Windows.Forms.KeyEventHandler(this.AccountDlg_KeyDown);
             // 
             // tabPage1
             // 
+            this.tabPage1.Controls.Add(this.groupBox2);
             this.tabPage1.Controls.Add(this.groupBox1);
             this.tabPage1.Controls.Add(this.sortOrder);
             this.tabPage1.Controls.Add(this.label6);
@@ -193,9 +197,10 @@ namespace UploadExpress
             this.tabPage1.Controls.Add(this.label1);
             this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Name = "tabPage1";
-            this.tabPage1.Size = new System.Drawing.Size(424, 373);
+            this.tabPage1.Size = new System.Drawing.Size(424, 476);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Account";
+            this.tabPage1.Click += new System.EventHandler(this.tabPage1_Click);
             // 
             // groupBox1
             // 
@@ -206,12 +211,13 @@ namespace UploadExpress
             this.groupBox1.Controls.Add(this.proxyOn);
             this.groupBox1.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.groupBox1.ForeColor = System.Drawing.SystemColors.ControlText;
-            this.groupBox1.Location = new System.Drawing.Point(15, 184);
+            this.groupBox1.Location = new System.Drawing.Point(15, 298);
             this.groupBox1.Name = "groupBox1";
             this.groupBox1.Size = new System.Drawing.Size(392, 160);
             this.groupBox1.TabIndex = 11;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Proxy Settings";
+            this.groupBox1.Enter += new System.EventHandler(this.groupBox1_Enter);
             // 
             // proxyPort
             // 
@@ -331,44 +337,13 @@ namespace UploadExpress
             // 
             // tabPage2
             // 
-            this.tabPage2.Controls.Add(this.amountVal);
-            this.tabPage2.Controls.Add(this.amount);
-            this.tabPage2.Controls.Add(this.compression);
             this.tabPage2.Controls.Add(this.label3);
             this.tabPage2.Controls.Add(this.server);
             this.tabPage2.Location = new System.Drawing.Point(4, 22);
             this.tabPage2.Name = "tabPage2";
-            this.tabPage2.Size = new System.Drawing.Size(424, 373);
+            this.tabPage2.Size = new System.Drawing.Size(424, 476);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "Settings";
-            // 
-            // amountVal
-            // 
-            this.amountVal.Location = new System.Drawing.Point(336, 312);
-            this.amountVal.Name = "amountVal";
-            this.amountVal.Size = new System.Drawing.Size(24, 23);
-            this.amountVal.TabIndex = 5;
-            this.amountVal.Text = "100";
-            // 
-            // amount
-            // 
-            this.amount.LargeChange = 1;
-            this.amount.Location = new System.Drawing.Point(248, 42);
-            this.amount.Name = "amount";
-            this.amount.Size = new System.Drawing.Size(104, 45);
-            this.amount.TabIndex = 4;
-            this.amount.ValueChanged += new System.EventHandler(this.amount_ValueChanged);
-            // 
-            // compression
-            // 
-            this.compression.CheckAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.compression.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.compression.Location = new System.Drawing.Point(28, 42);
-            this.compression.Name = "compression";
-            this.compression.Size = new System.Drawing.Size(168, 24);
-            this.compression.TabIndex = 3;
-            this.compression.Text = "Use Compression";
-            this.compression.CheckedChanged += new System.EventHandler(this.compression_CheckedChanged);
             // 
             // label3
             // 
@@ -387,12 +362,53 @@ namespace UploadExpress
             this.server.Size = new System.Drawing.Size(256, 20);
             this.server.TabIndex = 0;
             // 
+            // groupBox2
+            // 
+            this.groupBox2.Controls.Add(this.amountVal);
+            this.groupBox2.Controls.Add(this.amount);
+            this.groupBox2.Controls.Add(this.compression);
+            this.groupBox2.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.groupBox2.Location = new System.Drawing.Point(15, 187);
+            this.groupBox2.Name = "groupBox2";
+            this.groupBox2.Size = new System.Drawing.Size(392, 100);
+            this.groupBox2.TabIndex = 12;
+            this.groupBox2.TabStop = false;
+            this.groupBox2.Text = "Compression";
+            // 
+            // amount
+            // 
+            this.amount.LargeChange = 1;
+            this.amount.Location = new System.Drawing.Point(192, 43);
+            this.amount.Name = "amount";
+            this.amount.Size = new System.Drawing.Size(104, 45);
+            this.amount.TabIndex = 6;
+            this.amount.ValueChanged += new System.EventHandler(this.amount_ValueChanged);
+            // 
+            // compression
+            // 
+            this.compression.CheckAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.compression.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.compression.Location = new System.Drawing.Point(20, 43);
+            this.compression.Name = "compression";
+            this.compression.Size = new System.Drawing.Size(140, 24);
+            this.compression.TabIndex = 5;
+            this.compression.Text = "Enable";
+            this.compression.CheckedChanged += new System.EventHandler(this.compression_CheckedChanged);
+            // 
+            // amountVal
+            // 
+            this.amountVal.Location = new System.Drawing.Point(333, 45);
+            this.amountVal.Name = "amountVal";
+            this.amountVal.Size = new System.Drawing.Size(36, 23);
+            this.amountVal.TabIndex = 7;
+            this.amountVal.Text = "100";
+            // 
             // AccountDlg
             // 
             this.AcceptButton = this.ok_btn;
             this.AutoScaleBaseSize = new System.Drawing.Size(5, 13);
             this.CancelButton = this.cancel_btn;
-            this.ClientSize = new System.Drawing.Size(448, 492);
+            this.ClientSize = new System.Drawing.Size(448, 594);
             this.ControlBox = false;
             this.Controls.Add(this.tab);
             this.Controls.Add(this.cancel_btn);
@@ -411,6 +427,8 @@ namespace UploadExpress
             ((System.ComponentModel.ISupportInitialize)(this.images)).EndInit();
             this.tabPage2.ResumeLayout(false);
             this.tabPage2.PerformLayout();
+            this.groupBox2.ResumeLayout(false);
+            this.groupBox2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.amount)).EndInit();
             this.ResumeLayout(false);
 
@@ -466,5 +484,13 @@ namespace UploadExpress
 		proxyPort.Enabled = false;
 	    }
 	}
+
+        private void tabPage1_Click(object sender, EventArgs e) {
+
+        }
+
+        private void groupBox1_Enter(object sender, EventArgs e) {
+
+        }
     }
 }

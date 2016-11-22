@@ -180,7 +180,7 @@ namespace UploadExpress {
                         // abort or ignore this page, but for now, we'll just retry.
                         totalErrors++;
                         contiguousErrors++;
-                        Delay();
+                        await Delay();
                         break;
                     case SessionError.PageFull:
                         // Page is full.  Create a new page for images remaining on this page.

@@ -366,7 +366,7 @@ namespace DigiProofs.JSONUploader {
                     Upload upload = JsonConvert.DeserializeObject<Upload>(result);
                     switch (upload.code) {
                         case 100:
-                            log.Add(new LogEntry("Upload Complete: " + upload.image_id, ""));
+                            log.Add(new LogEntry(String.Format("Upload Complete {0}: {1}", upload.image_id, filename), ""));
                             return upload.image_id;
                         case 1030:
                             throw new SessionException(upload.message, SessionError.NotLoggedIn);

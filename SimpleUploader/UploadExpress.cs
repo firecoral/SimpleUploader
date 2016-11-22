@@ -6,7 +6,6 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Net;
 using DigiProofs.JSONUploader;
 using DigiProofs.Logger;
 
@@ -83,10 +82,25 @@ namespace UploadExpress
 	    this.import_btn.Tag = menuImport;
 	    this.upload_btn.Tag = menuUpload;
 	    this.purge_btn.Tag = menuPurge;
+
+            Shown += UploadExpress_Shown;
 	}
 
+        // This is just a stub function for now, but can be used if in the future
+        // we need to do some initialization before creating the UploadExpress form.
         public async Task InitializeAsync() {
-            // Generate data file directory and make sure it exists. XXX - Migrate data to Properties.Settings
+            await Task.FromResult<object>(null);
+        }
+
+        // We want to wait until the form is displayed since we may be updating labels
+        // in the form.
+        private async void UploadExpress_Shown(object sender, EventArgs e) {
+            await AccountsAsync();
+        }
+
+
+        public async Task AccountsAsync() {
+            // Generate data file directory and make sure it exists.
             dataDirPath = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
             dataDirPath += Path.DirectorySeparatorChar;
             dataDirPath += "DigiProofs";
@@ -109,6 +123,12 @@ namespace UploadExpress
             accountListChanged(accounts, EventArgs.Empty);
         }
 
+        // <summary>
+        // Prompt for a email and password.  This will loop until it gets a valid
+        // email/password.  If the user cancels the dialog, it will display a message
+        // and the app will end.
+        // On success the user will be logged into an account.
+        // </summary>
         private async Task InitialAccount() {
             string token = null;
             log.Add(new LogEntry("Adding Initial Account", ""));
@@ -130,63 +150,78 @@ namespace UploadExpress
                         proxy = account.ProxyHost + ":" + account.ProxyPort.ToString();
                     account.Session = new NetSession(Log, account.Server, account.Email, account.Token, proxy);
                     token = await GetToken(account, password);
+                    
+                    account.IsDefault = true;
+                    accounts.Add(account);
+                    CurrentAccount = account;
+                    log.Add(new LogEntry(String.Format("Added Account {0}", account.Email), ""));
                     if (token != null) {
+                        statusBar1.Text = "Logged in as " + CurrentAccount.Email;
                         account.Token = token;
-                        account.IsDefault = true;
-                        accounts.Add(account);
-                        log.Add(new LogEntry(String.Format("Added Account {0}", account.Email), ""));
-                        accounts.SaveAccounts();
                         await account.Session.GetEventListAsync();
                         log.Add(new LogEntry(String.Format("Obtained Events for {0}", account.Email), ""));
-                        statusBar1.Text = "Logged in as " + CurrentAccount.Email;
-                        return;
                     }
                     else {
-                        initialAccountDialog.Password = "";
-                        continue;
+                        statusBar1.Text = "Logged in failed";
                     }
+                    accounts.SaveAccounts();
+                    return;
                 }
                 // if the dialog is cancelled, we abort here.
                 MessageBox.Show("You must provide an account to use this program",
                             "UploadExpress",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Error);
-                Environment.Exit(0);
+                //Environment.Exit(0);
+                return;
             }
         }
 
-        public async Task LoginAsync(Account account) {
-            if (account.Session == null) {
+        public async Task LoginAsync() {
+            if (CurrentAccount == null) {
+                if (accounts.Count == 0) {
+                    await InitialAccount();
+                    return;  // InitialAccounts does all the work and is guaranteed to return with a valid CurrentAccount
+                }
+                else {
+                    foreach (Account acct in accounts) {
+                        if (acct.IsDefault) {
+                            CurrentAccount = acct;
+                            break;
+                        }
+                    }
+                    if (CurrentAccount == null) {
+                        // This should never happen.
+                        log.Add(new LogEntry(String.Format("Missing default account (which shouldn't happen).  Using {0}", CurrentAccount.Email), ""));
+                        CurrentAccount = accounts[0];
+                    }
+                }
+            }
+            if (CurrentAccount.Session == null) {
                 string proxy = null;
-                if (account.ProxyOn)
-                    proxy = account.ProxyHost + ":" + account.ProxyPort.ToString();
-                account.Session = new NetSession(Log, account.Server, account.Email, account.Token, proxy);
-                if (account.Token == null) {
-                    log.Add(new LogEntry(String.Format("No Token for Account {0}", account.Email), ""));
-                    await PasswordAsync(account);
-                    if (account.Token == null) {
-                        CurrentAccount = null;
+                if (CurrentAccount.ProxyOn)
+                    proxy = CurrentAccount.ProxyHost + ":" + CurrentAccount.ProxyPort.ToString();
+                CurrentAccount.Session = new NetSession(Log, CurrentAccount.Server, CurrentAccount.Email, CurrentAccount.Token, proxy);
+                if (CurrentAccount.Token == null) {
+                    log.Add(new LogEntry(String.Format("No Token for Account {0}", CurrentAccount.Email), ""));
+                    AccountPassword accountPasswordDialog = new AccountPassword();
+                    accountPasswordDialog.ShowDialog();
+                    if (accountPasswordDialog.DialogResult == DialogResult.OK) {
+                        string password = accountPasswordDialog.Password;
+                        string token = await GetToken(CurrentAccount, password);
+                        CurrentAccount.Token = token;
+                        accounts.SaveAccounts();
+                    }
+                    if (CurrentAccount.Token == null) {
                         return;
                     }
                 }
                 statusBar1.Text = "Logging into " + CurrentAccount.Email;
-                await account.Session.GetEventListAsync();
-                log.Add(new LogEntry(String.Format("Obtained Events for {0}", account.Email), ""));
+                await CurrentAccount.Session.GetEventListAsync();
+                log.Add(new LogEntry(String.Format("Obtained Events for {0}", CurrentAccount.Email), ""));
                 statusBar1.Text = "Logged in as " + CurrentAccount.Email;
             }
-            CurrentAccount = account;
             return;
-        }
-
-        public async Task PasswordAsync(Account account) {
-            AccountPassword accountPasswordDialog = new AccountPassword();
-            accountPasswordDialog.ShowDialog();
-            if (accountPasswordDialog.DialogResult == DialogResult.OK) {
-                string password = accountPasswordDialog.Password;
-                string token = await GetToken(account, password);
-                account.Token = token;
-                accounts.SaveAccounts();
-            }
         }
 
         // <summary>
@@ -287,48 +322,48 @@ namespace UploadExpress
         /// the contents of this method with the code editor.
         /// </summary>
         private void InitializeComponent() {
-	    this.components = new System.ComponentModel.Container();
-	    System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(UploadExpress));
-	    this.mainMenu1 = new MainMenu(this.components);
-	    this.menuFile = new System.Windows.Forms.MenuItem();
-	    this.menuNew = new System.Windows.Forms.MenuItem();
-	    this.menuImport = new System.Windows.Forms.MenuItem();
-	    this.menuUpload = new System.Windows.Forms.MenuItem();
-	    this.menuPurge = new System.Windows.Forms.MenuItem();
-	    this.menuAccounts = new System.Windows.Forms.MenuItem();
-	    this.menuRefresh = new System.Windows.Forms.MenuItem();
-	    this.menuExit = new System.Windows.Forms.MenuItem();
-	    this.menuItem1 = new System.Windows.Forms.MenuItem();
-	    this.menuHelp = new System.Windows.Forms.MenuItem();
-	    this.menuLog = new System.Windows.Forms.MenuItem();
-	    this.menuAbout = new System.Windows.Forms.MenuItem();
-	    this.contextMenu1 = new System.Windows.Forms.ContextMenu();
-	    this.DeleteUploadSet = new System.Windows.Forms.MenuItem();
-	    this.DeletePage = new System.Windows.Forms.MenuItem();
-	    this.DeleteImage = new System.Windows.Forms.MenuItem();
-	    this.toolBar1 = new System.Windows.Forms.ToolBar();
-	    this.new_btn = new System.Windows.Forms.ToolBarButton();
-	    this.import_btn = new System.Windows.Forms.ToolBarButton();
-	    this.sep1 = new System.Windows.Forms.ToolBarButton();
-	    this.upload_btn = new System.Windows.Forms.ToolBarButton();
-	    this.sep2 = new System.Windows.Forms.ToolBarButton();
-	    this.purge_btn = new System.Windows.Forms.ToolBarButton();
-	    this.imageList1 = new System.Windows.Forms.ImageList(this.components);
-	    this.accountList1 = new System.Windows.Forms.ComboBox();
-	    this.statusBar1 = new System.Windows.Forms.StatusBar();
-	    this.treeView1 = new System.Windows.Forms.TreeView();
-	    this.SuspendLayout();
-	    // 
-	    // mainMenu1
-	    // 
-	    this.mainMenu1.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
+            this.components = new System.ComponentModel.Container();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(UploadExpress));
+            this.mainMenu1 = new System.Windows.Forms.MainMenu(this.components);
+            this.menuFile = new System.Windows.Forms.MenuItem();
+            this.menuNew = new System.Windows.Forms.MenuItem();
+            this.menuImport = new System.Windows.Forms.MenuItem();
+            this.menuUpload = new System.Windows.Forms.MenuItem();
+            this.menuPurge = new System.Windows.Forms.MenuItem();
+            this.menuAccounts = new System.Windows.Forms.MenuItem();
+            this.menuRefresh = new System.Windows.Forms.MenuItem();
+            this.menuExit = new System.Windows.Forms.MenuItem();
+            this.menuItem1 = new System.Windows.Forms.MenuItem();
+            this.menuHelp = new System.Windows.Forms.MenuItem();
+            this.menuLog = new System.Windows.Forms.MenuItem();
+            this.menuAbout = new System.Windows.Forms.MenuItem();
+            this.contextMenu1 = new System.Windows.Forms.ContextMenu();
+            this.DeleteUploadSet = new System.Windows.Forms.MenuItem();
+            this.DeletePage = new System.Windows.Forms.MenuItem();
+            this.DeleteImage = new System.Windows.Forms.MenuItem();
+            this.toolBar1 = new System.Windows.Forms.ToolBar();
+            this.new_btn = new System.Windows.Forms.ToolBarButton();
+            this.import_btn = new System.Windows.Forms.ToolBarButton();
+            this.sep1 = new System.Windows.Forms.ToolBarButton();
+            this.upload_btn = new System.Windows.Forms.ToolBarButton();
+            this.sep2 = new System.Windows.Forms.ToolBarButton();
+            this.purge_btn = new System.Windows.Forms.ToolBarButton();
+            this.imageList1 = new System.Windows.Forms.ImageList(this.components);
+            this.accountList1 = new System.Windows.Forms.ComboBox();
+            this.statusBar1 = new System.Windows.Forms.StatusBar();
+            this.treeView1 = new System.Windows.Forms.TreeView();
+            this.SuspendLayout();
+            // 
+            // mainMenu1
+            // 
+            this.mainMenu1.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
             this.menuFile,
             this.menuItem1});
-	    // 
-	    // menuFile
-	    // 
-	    this.menuFile.Index = 0;
-	    this.menuFile.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
+            // 
+            // menuFile
+            // 
+            this.menuFile.Index = 0;
+            this.menuFile.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
             this.menuNew,
             this.menuImport,
             this.menuUpload,
@@ -336,215 +371,216 @@ namespace UploadExpress
             this.menuAccounts,
             this.menuRefresh,
             this.menuExit});
-	    this.menuFile.Text = "File";
-	    // 
-	    // menuNew
-	    // 
-	    this.menuNew.Index = 0;
-	    this.menuNew.Shortcut = System.Windows.Forms.Shortcut.CtrlN;
-	    this.menuNew.Text = "New";
-	    this.menuNew.Click += new System.EventHandler(this.menuNew_Click);
-	    // 
-	    // menuImport
-	    // 
-	    this.menuImport.Index = 1;
-	    this.menuImport.Shortcut = System.Windows.Forms.Shortcut.CtrlI;
-	    this.menuImport.Text = "Import";
-	    this.menuImport.Click += new System.EventHandler(this.menuImport_Click);
-	    // 
-	    // menuUpload
-	    // 
-	    this.menuUpload.Index = 2;
-	    this.menuUpload.Shortcut = System.Windows.Forms.Shortcut.CtrlU;
-	    this.menuUpload.Text = "Upload";
-	    this.menuUpload.Click += new System.EventHandler(this.start_Click);
-	    // 
-	    // menuPurge
-	    // 
-	    this.menuPurge.Index = 3;
-	    this.menuPurge.Shortcut = System.Windows.Forms.Shortcut.CtrlP;
-	    this.menuPurge.Text = "Purge";
-	    this.menuPurge.Click += new System.EventHandler(this.menuPurge_Click);
-	    // 
-	    // menuAccounts
-	    // 
-	    this.menuAccounts.Index = 4;
-	    this.menuAccounts.Text = "Accounts";
-	    this.menuAccounts.Click += new System.EventHandler(this.menuAccounts_Click);
-	    // 
-	    // menuRefresh
-	    // 
-	    this.menuRefresh.Index = 5;
-	    this.menuRefresh.Text = "Refresh Login";
-	    // 
-	    // menuExit
-	    // 
-	    this.menuExit.Index = 6;
-	    this.menuExit.Text = "Exit";
-	    this.menuExit.Click += new System.EventHandler(this.menuExit_Click);
-	    // 
-	    // menuItem1
-	    // 
-	    this.menuItem1.Index = 1;
-	    this.menuItem1.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
+            this.menuFile.Text = "File";
+            // 
+            // menuNew
+            // 
+            this.menuNew.Index = 0;
+            this.menuNew.Shortcut = System.Windows.Forms.Shortcut.CtrlN;
+            this.menuNew.Text = "New";
+            this.menuNew.Click += new System.EventHandler(this.menuNew_Click);
+            // 
+            // menuImport
+            // 
+            this.menuImport.Index = 1;
+            this.menuImport.Shortcut = System.Windows.Forms.Shortcut.CtrlI;
+            this.menuImport.Text = "Import";
+            this.menuImport.Click += new System.EventHandler(this.menuImport_Click);
+            // 
+            // menuUpload
+            // 
+            this.menuUpload.Index = 2;
+            this.menuUpload.Shortcut = System.Windows.Forms.Shortcut.CtrlU;
+            this.menuUpload.Text = "Upload";
+            this.menuUpload.Click += new System.EventHandler(this.start_Click);
+            // 
+            // menuPurge
+            // 
+            this.menuPurge.Index = 3;
+            this.menuPurge.Shortcut = System.Windows.Forms.Shortcut.CtrlP;
+            this.menuPurge.Text = "Purge";
+            this.menuPurge.Click += new System.EventHandler(this.menuPurge_Click);
+            // 
+            // menuAccounts
+            // 
+            this.menuAccounts.Index = 4;
+            this.menuAccounts.Text = "Accounts";
+            this.menuAccounts.Click += new System.EventHandler(this.menuAccounts_Click);
+            // 
+            // menuRefresh
+            // 
+            this.menuRefresh.Index = 5;
+            this.menuRefresh.Text = "Refresh Login";
+            this.menuRefresh.Click += new System.EventHandler(this.menuRefresh_Click);
+            // 
+            // menuExit
+            // 
+            this.menuExit.Index = 6;
+            this.menuExit.Text = "Exit";
+            this.menuExit.Click += new System.EventHandler(this.menuExit_Click);
+            // 
+            // menuItem1
+            // 
+            this.menuItem1.Index = 1;
+            this.menuItem1.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
             this.menuHelp,
             this.menuLog,
             this.menuAbout});
-	    this.menuItem1.Text = "Help";
-	    // 
-	    // menuHelp
-	    // 
-	    this.menuHelp.Index = 0;
-	    this.menuHelp.Text = "Help";
-	    this.menuHelp.Click += new System.EventHandler(this.menuHelp_Click);
-	    // 
-	    // menuLog
-	    // 
-	    this.menuLog.Index = 1;
-	    this.menuLog.Text = "Log";
-	    this.menuLog.Click += new System.EventHandler(this.menuLog_Click);
-	    // 
-	    // menuAbout
-	    // 
-	    this.menuAbout.Index = 2;
-	    this.menuAbout.Text = "About";
-	    this.menuAbout.Click += new System.EventHandler(this.menuAbout_Click);
-	    // 
-	    // contextMenu1
-	    // 
-	    this.contextMenu1.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
+            this.menuItem1.Text = "Help";
+            // 
+            // menuHelp
+            // 
+            this.menuHelp.Index = 0;
+            this.menuHelp.Text = "Help";
+            this.menuHelp.Click += new System.EventHandler(this.menuHelp_Click);
+            // 
+            // menuLog
+            // 
+            this.menuLog.Index = 1;
+            this.menuLog.Text = "Log";
+            this.menuLog.Click += new System.EventHandler(this.menuLog_Click);
+            // 
+            // menuAbout
+            // 
+            this.menuAbout.Index = 2;
+            this.menuAbout.Text = "About";
+            this.menuAbout.Click += new System.EventHandler(this.menuAbout_Click);
+            // 
+            // contextMenu1
+            // 
+            this.contextMenu1.MenuItems.AddRange(new System.Windows.Forms.MenuItem[] {
             this.DeleteUploadSet,
             this.DeletePage,
             this.DeleteImage});
-	    this.contextMenu1.Popup += new System.EventHandler(this.BeforePopup);
-	    // 
-	    // DeleteUploadSet
-	    // 
-	    this.DeleteUploadSet.Index = 0;
-	    this.DeleteUploadSet.Text = "Delete Upload Set";
-	    this.DeleteUploadSet.Click += new System.EventHandler(this.DeleteUploadSet_Click);
-	    // 
-	    // DeletePage
-	    // 
-	    this.DeletePage.Index = 1;
-	    this.DeletePage.Text = "Delete Page";
-	    this.DeletePage.Click += new System.EventHandler(this.DeletePage_Click);
-	    // 
-	    // DeleteImage
-	    // 
-	    this.DeleteImage.Index = 2;
-	    this.DeleteImage.Text = "Delete Image";
-	    this.DeleteImage.Click += new System.EventHandler(this.DeleteImage_Click);
-	    // 
-	    // toolBar1
-	    // 
-	    this.toolBar1.Buttons.AddRange(new System.Windows.Forms.ToolBarButton[] {
+            this.contextMenu1.Popup += new System.EventHandler(this.BeforePopup);
+            // 
+            // DeleteUploadSet
+            // 
+            this.DeleteUploadSet.Index = 0;
+            this.DeleteUploadSet.Text = "Delete Upload Set";
+            this.DeleteUploadSet.Click += new System.EventHandler(this.DeleteUploadSet_Click);
+            // 
+            // DeletePage
+            // 
+            this.DeletePage.Index = 1;
+            this.DeletePage.Text = "Delete Page";
+            this.DeletePage.Click += new System.EventHandler(this.DeletePage_Click);
+            // 
+            // DeleteImage
+            // 
+            this.DeleteImage.Index = 2;
+            this.DeleteImage.Text = "Delete Image";
+            this.DeleteImage.Click += new System.EventHandler(this.DeleteImage_Click);
+            // 
+            // toolBar1
+            // 
+            this.toolBar1.Buttons.AddRange(new System.Windows.Forms.ToolBarButton[] {
             this.new_btn,
             this.import_btn,
             this.sep1,
             this.upload_btn,
             this.sep2,
             this.purge_btn});
-	    this.toolBar1.DropDownArrows = true;
-	    this.toolBar1.ImageList = this.imageList1;
-	    this.toolBar1.Location = new System.Drawing.Point(0, 0);
-	    this.toolBar1.Name = "toolBar1";
-	    this.toolBar1.ShowToolTips = true;
-	    this.toolBar1.Size = new System.Drawing.Size(520, 42);
-	    this.toolBar1.TabIndex = 4;
-	    this.toolBar1.ButtonClick += new System.Windows.Forms.ToolBarButtonClickEventHandler(this.toolBar1_ButtonClick);
-	    // 
-	    // new_btn
-	    // 
-	    this.new_btn.ImageIndex = 0;
-	    this.new_btn.Name = "new_btn";
-	    this.new_btn.Tag = "";
-	    this.new_btn.Text = "New";
-	    this.new_btn.ToolTipText = "Add new upload set";
-	    // 
-	    // import_btn
-	    // 
-	    this.import_btn.ImageIndex = 4;
-	    this.import_btn.Name = "import_btn";
-	    this.import_btn.Text = "Import";
-	    this.import_btn.ToolTipText = "Import Images into selected Upload Set";
-	    // 
-	    // sep1
-	    // 
-	    this.sep1.Name = "sep1";
-	    this.sep1.Style = System.Windows.Forms.ToolBarButtonStyle.Separator;
-	    // 
-	    // upload_btn
-	    // 
-	    this.upload_btn.ImageIndex = 2;
-	    this.upload_btn.Name = "upload_btn";
-	    this.upload_btn.Tag = "";
-	    this.upload_btn.Text = "Upload";
-	    this.upload_btn.ToolTipText = "Begin Uploading";
-	    // 
-	    // sep2
-	    // 
-	    this.sep2.Name = "sep2";
-	    this.sep2.Style = System.Windows.Forms.ToolBarButtonStyle.Separator;
-	    // 
-	    // purge_btn
-	    // 
-	    this.purge_btn.ImageIndex = 1;
-	    this.purge_btn.Name = "purge_btn";
-	    this.purge_btn.Text = "Purge";
-	    this.purge_btn.ToolTipText = "Remove Completed Upload Sets";
-	    // 
-	    // imageList1
-	    // 
-	    this.imageList1.ImageStream = ((System.Windows.Forms.ImageListStreamer)(resources.GetObject("imageList1.ImageStream")));
-	    this.imageList1.TransparentColor = System.Drawing.Color.Transparent;
-	    this.imageList1.Images.SetKeyName(0, "");
-	    this.imageList1.Images.SetKeyName(1, "");
-	    this.imageList1.Images.SetKeyName(2, "");
-	    this.imageList1.Images.SetKeyName(3, "");
-	    this.imageList1.Images.SetKeyName(4, "");
-	    // 
-	    // accountList1
-	    // 
-	    this.accountList1.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-	    this.accountList1.Location = new System.Drawing.Point(256, 8);
-	    this.accountList1.Name = "accountList1";
-	    this.accountList1.Size = new System.Drawing.Size(168, 21);
-	    this.accountList1.TabIndex = 5;
-	    this.accountList1.SelectedValueChanged += new System.EventHandler(this.accountList1_SelectedIndexChanged);
-	    // 
-	    // statusBar1
-	    // 
-	    this.statusBar1.Location = new System.Drawing.Point(0, 587);
-	    this.statusBar1.Name = "statusBar1";
-	    this.statusBar1.Size = new System.Drawing.Size(520, 22);
-	    this.statusBar1.TabIndex = 6;
-	    // 
-	    // treeView1
-	    // 
-	    this.treeView1.BackColor = System.Drawing.SystemColors.Window;
-	    this.treeView1.ContextMenu = this.contextMenu1;
-	    this.treeView1.Dock = System.Windows.Forms.DockStyle.Fill;
-	    this.treeView1.HideSelection = false;
-	    this.treeView1.Location = new System.Drawing.Point(0, 42);
-	    this.treeView1.Name = "treeView1";
-	    this.treeView1.Size = new System.Drawing.Size(520, 545);
-	    this.treeView1.TabIndex = 7;
-	    // 
-	    // UploadExpress
-	    // 
-	    this.AutoScaleBaseSize = new System.Drawing.Size(5, 13);
-	    this.ClientSize = new System.Drawing.Size(520, 609);
-	    this.Controls.Add(this.treeView1);
-	    this.Controls.Add(this.accountList1);
-	    this.Controls.Add(this.toolBar1);
-	    this.Controls.Add(this.statusBar1);
-	    this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-	    this.Menu = this.mainMenu1;
-	    this.Name = "UploadExpress";
-	    this.Text = "UploadExpress";
-	    this.ResumeLayout(false);
-	    this.PerformLayout();
+            this.toolBar1.DropDownArrows = true;
+            this.toolBar1.ImageList = this.imageList1;
+            this.toolBar1.Location = new System.Drawing.Point(0, 0);
+            this.toolBar1.Name = "toolBar1";
+            this.toolBar1.ShowToolTips = true;
+            this.toolBar1.Size = new System.Drawing.Size(520, 42);
+            this.toolBar1.TabIndex = 4;
+            this.toolBar1.ButtonClick += new System.Windows.Forms.ToolBarButtonClickEventHandler(this.toolBar1_ButtonClick);
+            // 
+            // new_btn
+            // 
+            this.new_btn.ImageIndex = 0;
+            this.new_btn.Name = "new_btn";
+            this.new_btn.Tag = "";
+            this.new_btn.Text = "New";
+            this.new_btn.ToolTipText = "Add new upload set";
+            // 
+            // import_btn
+            // 
+            this.import_btn.ImageIndex = 4;
+            this.import_btn.Name = "import_btn";
+            this.import_btn.Text = "Import";
+            this.import_btn.ToolTipText = "Import Images into selected Upload Set";
+            // 
+            // sep1
+            // 
+            this.sep1.Name = "sep1";
+            this.sep1.Style = System.Windows.Forms.ToolBarButtonStyle.Separator;
+            // 
+            // upload_btn
+            // 
+            this.upload_btn.ImageIndex = 2;
+            this.upload_btn.Name = "upload_btn";
+            this.upload_btn.Tag = "";
+            this.upload_btn.Text = "Upload";
+            this.upload_btn.ToolTipText = "Begin Uploading";
+            // 
+            // sep2
+            // 
+            this.sep2.Name = "sep2";
+            this.sep2.Style = System.Windows.Forms.ToolBarButtonStyle.Separator;
+            // 
+            // purge_btn
+            // 
+            this.purge_btn.ImageIndex = 1;
+            this.purge_btn.Name = "purge_btn";
+            this.purge_btn.Text = "Purge";
+            this.purge_btn.ToolTipText = "Remove Completed Upload Sets";
+            // 
+            // imageList1
+            // 
+            this.imageList1.ImageStream = ((System.Windows.Forms.ImageListStreamer)(resources.GetObject("imageList1.ImageStream")));
+            this.imageList1.TransparentColor = System.Drawing.Color.Transparent;
+            this.imageList1.Images.SetKeyName(0, "");
+            this.imageList1.Images.SetKeyName(1, "");
+            this.imageList1.Images.SetKeyName(2, "");
+            this.imageList1.Images.SetKeyName(3, "");
+            this.imageList1.Images.SetKeyName(4, "");
+            // 
+            // accountList1
+            // 
+            this.accountList1.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.accountList1.Location = new System.Drawing.Point(256, 8);
+            this.accountList1.Name = "accountList1";
+            this.accountList1.Size = new System.Drawing.Size(168, 21);
+            this.accountList1.TabIndex = 5;
+            this.accountList1.SelectedValueChanged += new System.EventHandler(this.accountList1_SelectedIndexChanged);
+            // 
+            // statusBar1
+            // 
+            this.statusBar1.Location = new System.Drawing.Point(0, 587);
+            this.statusBar1.Name = "statusBar1";
+            this.statusBar1.Size = new System.Drawing.Size(520, 22);
+            this.statusBar1.TabIndex = 6;
+            // 
+            // treeView1
+            // 
+            this.treeView1.BackColor = System.Drawing.SystemColors.Window;
+            this.treeView1.ContextMenu = this.contextMenu1;
+            this.treeView1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.treeView1.HideSelection = false;
+            this.treeView1.Location = new System.Drawing.Point(0, 42);
+            this.treeView1.Name = "treeView1";
+            this.treeView1.Size = new System.Drawing.Size(520, 545);
+            this.treeView1.TabIndex = 7;
+            // 
+            // UploadExpress
+            // 
+            this.AutoScaleBaseSize = new System.Drawing.Size(5, 13);
+            this.ClientSize = new System.Drawing.Size(520, 609);
+            this.Controls.Add(this.treeView1);
+            this.Controls.Add(this.accountList1);
+            this.Controls.Add(this.toolBar1);
+            this.Controls.Add(this.statusBar1);
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.Menu = this.mainMenu1;
+            this.Name = "UploadExpress";
+            this.Text = "UploadExpress";
+            this.ResumeLayout(false);
+            this.PerformLayout();
 
 	}
 	#endregion
@@ -553,7 +589,7 @@ namespace UploadExpress
 	// Invoke the properties dialog
 	//
 	private void menuExit_Click(object sender, System.EventArgs e) {
-	    this.Dispose();
+            Environment.Exit(0);
 	}
 
 	//
@@ -571,18 +607,11 @@ namespace UploadExpress
 	// 
 	// Select an Event, then create a new UploadView for that event.
 	//
-	private void menuNew_Click(object sender, System.EventArgs e) {
-            Console.WriteLine("checking");
-	    if (CurrentAccount == null) {
-                InitialAccount initialAccountDialog = new InitialAccount();
-                Console.WriteLine("Showing dialog");
-                initialAccountDialog.ShowDialog();
-                if (initialAccountDialog.DialogResult == DialogResult.OK) {
-                    Console.WriteLine("got dialog");
-                }
+	private async void menuNew_Click(object sender, System.EventArgs e) {
+            await LoginAsync();
+            if (CurrentAccount == null || CurrentAccount.Session == null || CurrentAccount.Token == null)
                 return;
-	    }
-	    try {
+            try {
 		if (CurrentAccount.Session.EventList.Length == 0) {
 		    MessageBox.Show("You have no events available for uploading in this account." + Environment.NewLine +
 			"Please log into your account and create a new event for this upload.",
@@ -646,16 +675,11 @@ namespace UploadExpress
 	// 
 	// Import new pages and images into the selected uploadset.
 	//
-	private void menuImport_Click(object sender, System.EventArgs e) {
-	    if (CurrentAccount == null) {
-		MessageBox.Show("Please use File -> Account to setup your DigiProofs Account.",
-		    "UploadExpress",
-		    MessageBoxButtons.OK,
-		    MessageBoxIcon.Error);
-		return;
-	    }
-
-	    TreeNode node = treeView1.SelectedNode;
+	private async void menuImport_Click(object sender, System.EventArgs e) {
+            await LoginAsync();
+            if (CurrentAccount == null || CurrentAccount.Session == null || CurrentAccount.Token == null)
+                return;
+            TreeNode node = treeView1.SelectedNode;
 	    if (node == null) {
 		MessageBox.Show("Please select an Upload Set below to import into.  Use 'New' to create a new Upload Set",
 		    "UploadExpress",
@@ -665,7 +689,7 @@ namespace UploadExpress
 	    }
 	    while (node.Parent != null)
 		node = node.Parent;
-	    string path = ((UploadSet)node.Tag).Import(this.CurrentAccount.SelectedPath);
+	    string path = ((UploadSet)node.Tag).Import(CurrentAccount.SelectedPath);
 	    if (path != null) {
 		CurrentAccount.SelectedPath = path;	// Save current selected path
 		accounts.SaveAccounts();
@@ -673,7 +697,10 @@ namespace UploadExpress
 	}
 
 	private async void start_Click(object sender, System.EventArgs e) {
-	    if (CurrentAccount.Upload == null) {
+            await LoginAsync();
+            if (CurrentAccount == null || CurrentAccount.Session == null || CurrentAccount.Token == null)
+                return;
+            if (CurrentAccount.Upload == null) {
 		CurrentAccount.Upload = new Upload();
 	    }
 	    Upload upload = CurrentAccount.Upload;
@@ -689,48 +716,18 @@ namespace UploadExpress
 	// 
 	// Refresh the login for the current account.
 	//
-	private void menuRefresh_Click(object sender, System.EventArgs e) {
-	    if (CurrentAccount == null) {
-		MessageBox.Show("Please use File -> Account to setup your DigiProofs Account.",
-		    "UploadExpress",
-		    MessageBoxButtons.OK,
-		    MessageBoxIcon.Error);
-		return;
-	    }
-	    try {
-		statusBar1.Text = "Logging into " + CurrentAccount.Email;
-		// XXX  CurrentAccount.Session.Login();
-		statusBar1.Text = "Logged in as " + CurrentAccount.Email;
-	    }
-	    catch (WebException ex) {
-		if ((int)((HttpWebResponse)ex.Response).StatusCode == 400) {
-		    MessageBox.Show("Couldn't log into " + CurrentAccount.Email + ".  Please check your email and password.",
-			"UploadExpress",
-			MessageBoxButtons.OK,
-			MessageBoxIcon.Error);
-		    statusBar1.Text = "Login Error";
-		}
-		else {
-		    MessageBox.Show(ex.Message + " Status: " + ex.Status,
-			"UploadExpress",
-			MessageBoxButtons.OK,
-			MessageBoxIcon.Error);
-		    statusBar1.Text = "Login Error";
-		}
-	    }
+	private async void menuRefresh_Click(object sender, System.EventArgs e) {
+            if (CurrentAccount != null) {
+                CurrentAccount.Session = null;
+                CurrentAccount.Token = null;
+            }
+            await LoginAsync();
 	}
 
 	// 
-	// Show the log for the current Session.
+	// Display the log
 	//
 	private void menuLog_Click(object sender, System.EventArgs e) {
-	    if (CurrentAccount == null) {
-		MessageBox.Show("Please use File -> Account to setup your DigiProofs Account.",
-		    "UploadExpress",
-		    MessageBoxButtons.OK,
-		    MessageBoxIcon.Error);
-		return;
-	    }
 	    new LogViewer(Log.ToString()).Show();
 	}
 
@@ -768,26 +765,22 @@ namespace UploadExpress
 
         private async void accountList1_SelectedIndexChanged(object sender, System.EventArgs e) {
 	    CurrentAccount = (Account)accountList1.SelectedItem;
-	    if (CurrentAccount == null) {
-		statusBar1.Text = "Not logged in";
-	    }
-	    else {
-                log.Add(new LogEntry(String.Format("Selected Account changed to {0}", CurrentAccount.Email), ""));
-                Cursor.Current = Cursors.WaitCursor;
+            log.Add(new LogEntry(String.Format("Selected Account changed to {0}", CurrentAccount.Email), ""));
+            Cursor.Current = Cursors.WaitCursor;
 
-                treeView1.Nodes.Clear();
-                await LoginAsync(CurrentAccount);
+            treeView1.Nodes.Clear();
+            await LoginAsync();
+            if (CurrentAccount == null || CurrentAccount.Session == null || CurrentAccount.Token == null)
+                return;
 
-		// now populate the UploadSetList
-		if (CurrentAccount.UploadSetList == null)
-		    RefreshUploadSets(CurrentAccount);
-		foreach (UploadSet uploadSet in CurrentAccount.UploadSetList) {
-		    treeView1.Nodes.Add(uploadSet.node);
-		}
-		Cursor.Current = Cursors.Arrow;
+            // now populate the UploadSetList
+            if (CurrentAccount.UploadSetList == null)
+		RefreshUploadSets(CurrentAccount);
+	    foreach (UploadSet uploadSet in CurrentAccount.UploadSetList) {
+		treeView1.Nodes.Add(uploadSet.node);
 	    }
+	    Cursor.Current = Cursors.Arrow;
 	}
-
 
 	private void DeleteUploadSet_Click(object sender, System.EventArgs e) {
 	    if (contextNode != null && contextNode.Tag.GetType() == Type.GetType("UploadExpress.UploadSet")) {
