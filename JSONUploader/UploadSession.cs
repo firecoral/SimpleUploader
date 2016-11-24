@@ -45,7 +45,7 @@ namespace DigiProofs.JSONUploader {
     }
 
     public class EventList {
-        public string max_size { get; set; }
+        public int max_size { get; set; }
         public List<Event> events { get; set; }
         public string token { get; set; }
         public string message { get; set; }
@@ -111,6 +111,7 @@ namespace DigiProofs.JSONUploader {
         private HttpClient httpClient;
         private HttpClient httpsClient;
         private LogList log;
+        private int max_size = 0;
 
         private Hashtable eventHash = new Hashtable();
         private Hashtable pageHash = new Hashtable();
@@ -127,6 +128,9 @@ namespace DigiProofs.JSONUploader {
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
                 return this.eventList;
             }
+        }
+        public int MaxSize {
+            get { return max_size; }
         }
 
         public NetSession(LogList log, string host, string email, string uploadToken, string proxy) {
@@ -162,6 +166,7 @@ namespace DigiProofs.JSONUploader {
         // Use the password to obtain a token from the server.
 
         public async Task<string> GetToken(string password) {
+            string resultJSON = "";
             try {
                 HttpContent emailContent = new StringContent(Email);
                 HttpContent passwordContent = new StringContent(password);
@@ -177,8 +182,8 @@ namespace DigiProofs.JSONUploader {
                     // but the are library issues that keep it from working at the moment,
                     // so I've fallen back to the somewhat more manual deserialization.
                     //token = await response.Content.ReadAsAsync<Token>();
-                    string result = await response.Content.ReadAsStringAsync();
-                    Token token = JsonConvert.DeserializeObject<Token>(result);
+                    resultJSON = await response.Content.ReadAsStringAsync();
+                    Token token = JsonConvert.DeserializeObject<Token>(resultJSON);
                     // Login error (1020) is a bad password.  All others are severe errors.
                     switch (token.code) {
                         case 100:
@@ -212,15 +217,23 @@ namespace DigiProofs.JSONUploader {
                 throw new SessionException(e.ToString(), SessionError.ServerError, e);
             }
 
+            catch (JsonException) {
+                log.Add(new LogEntry("JSON Error", resultJSON));
+                throw new SessionException("Internal Error", SessionError.InternalError);
+            }
+
             catch (Exception e) {
                 log.Add(new LogEntry("Unexpected error during login to " + Email, e.Message));
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
             return null;
+
         }
 
+
         public async Task GetEventListAsync() {
+            string resultJSON = "";
             try {
                 if (this.uploadToken == null)
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
@@ -233,10 +246,14 @@ namespace DigiProofs.JSONUploader {
                 multipartFormDataContent.Add(tokenContent, "\"token\"");
                 HttpResponseMessage response = await httpClient.PostAsync("ul/upload", multipartFormDataContent);
                 if (response.IsSuccessStatusCode) {
-                    string result = await response.Content.ReadAsStringAsync();
-                    eventList = JsonConvert.DeserializeObject<EventList>(result);
+                    resultJSON = await response.Content.ReadAsStringAsync();
+                    eventList = JsonConvert.DeserializeObject<EventList>(resultJSON);
                     switch (eventList.code) {
                         case 100:
+                            max_size = eventList.max_size;
+                            if (max_size > 0) {
+                                log.Add(new LogEntry(String.Format("Upload Size limit: {0}", max_size), ""));
+                            }
                             this.eventList = eventList.events.ToArray();
                             foreach (Event ev in this.eventList) {
                                 eventHash.Add(ev.event_id, ev);
@@ -245,6 +262,7 @@ namespace DigiProofs.JSONUploader {
                             }
                             break;
                         case 1030:
+                            this.uploadToken = null;
                             throw new SessionException(eventList.message, SessionError.NotLoggedIn);
                         case 1010:
                             throw new SessionException(eventList.message, SessionError.UploadDenied);
@@ -257,29 +275,31 @@ namespace DigiProofs.JSONUploader {
                 }
             }
             catch (SessionException e) {
-                this.uploadToken = null;
                 throw e;
             }
             catch (System.Net.WebException e) {
                 log.Add(new LogEntry("Network connection error during event fetch to " + email, e.Message));
-                this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.NetworkError, e);
             }
 
             catch (System.InvalidOperationException e) {
                 log.Add(new LogEntry("An InvalidOperationException occurred during event fetch to " + email, e.Message));
-                this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.ServerError, e);
+            }
+
+            catch (JsonException) {
+                log.Add(new LogEntry("JSON Error", resultJSON));
+                throw new SessionException("Internal Error", SessionError.InternalError);
             }
 
             catch (Exception e) {
                 log.Add(new LogEntry("Unexpected error during event fetch to " + email, e.Message));
-                this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
         }
 
         public async Task<int> NewPage(int event_id, string title) {
+            string resultJSON = "";
             try {
                 if (this.uploadToken == null)
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
@@ -297,14 +317,15 @@ namespace DigiProofs.JSONUploader {
                 }
                 HttpResponseMessage response = await httpClient.PostAsync("ul/upload", multipartFormDataContent);
                 if (response.IsSuccessStatusCode) {
-                    string result = await response.Content.ReadAsStringAsync();
-                    newPage = JsonConvert.DeserializeObject<NewPage>(result);
+                    resultJSON = await response.Content.ReadAsStringAsync();
+                    newPage = JsonConvert.DeserializeObject<NewPage>(resultJSON);
                     switch (newPage.code) {
                         case 100:
                             pageHash.Add(newPage.page_id, newPage);
                             log.Add(new LogEntry("New Page created: " + newPage.title + "(" + newPage.page_id + ")", ""));
                             return newPage.page_id;
                         case 1030:
+                            this.uploadToken = null;
                             throw new SessionException(newPage.message, SessionError.NotLoggedIn);
                         case 1010:
                             throw new SessionException(newPage.message, SessionError.UploadDenied);
@@ -319,30 +340,32 @@ namespace DigiProofs.JSONUploader {
                 }
             }
             catch (SessionException e) {
-                this.uploadToken = null;
                 throw e;
             }
             catch (System.Net.WebException e) {
                 log.Add(new LogEntry("Network connection error during page create " + email, e.Message));
-                this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.NetworkError, e);
             }
 
             catch (System.InvalidOperationException e) {
                 log.Add(new LogEntry("An InvalidOperationException occurred during page create " + email, e.Message));
-                this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.ServerError, e);
+            }
+
+            catch (JsonException) {
+                log.Add(new LogEntry("JSON Error", resultJSON));
+                throw new SessionException("Internal Error", SessionError.InternalError);
             }
 
             catch (Exception e) {
                 log.Add(new LogEntry("Unexpected error during page create " + email, e.Message));
-                this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
             return 0;
         }
 
         public async Task<string> Upload(int page_id, string filename, Stream image) {
+            string resultJSON = "";
             try {
                 if (this.uploadToken == null)
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
@@ -362,13 +385,14 @@ namespace DigiProofs.JSONUploader {
                 multipartFormDataContent.Add(imageContent);
                 HttpResponseMessage response = await httpClient.PostAsync("ul/upload", multipartFormDataContent);
                 if (response.IsSuccessStatusCode) {
-                    string result = await response.Content.ReadAsStringAsync();
-                    Upload upload = JsonConvert.DeserializeObject<Upload>(result);
+                    resultJSON = await response.Content.ReadAsStringAsync();
+                    Upload upload = JsonConvert.DeserializeObject<Upload>(resultJSON);
                     switch (upload.code) {
                         case 100:
                             log.Add(new LogEntry(String.Format("Upload Complete {0}: {1}", upload.image_id, filename), ""));
                             return upload.image_id;
                         case 1030:
+                            this.uploadToken = null;
                             throw new SessionException(upload.message, SessionError.NotLoggedIn);
                         case 1010:
                             throw new SessionException(upload.message, SessionError.UploadDenied);
@@ -393,24 +417,25 @@ namespace DigiProofs.JSONUploader {
                 }
             }
             catch (SessionException e) {
-                this.uploadToken = null;
                 throw e;
             }
             catch (System.Net.WebException e) {
                 log.Add(new LogEntry("Network connection error during upload " + filename, e.Message));
-                this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.NetworkError, e);
             }
 
             catch (System.InvalidOperationException e) {
                 log.Add(new LogEntry("An InvalidOperationException occurred during upload " + filename, e.Message));
-                this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.ServerError, e);
+            }
+
+            catch (JsonException) {
+                log.Add(new LogEntry("JSON Error", resultJSON));
+                throw new SessionException("Internal Error", SessionError.InternalError);
             }
 
             catch (Exception e) {
                 log.Add(new LogEntry("Unexpected error during event fetch to " + filename, e.Message));
-                this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
             return null;

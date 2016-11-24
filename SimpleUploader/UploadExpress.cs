@@ -701,7 +701,7 @@ namespace UploadExpress
             if (CurrentAccount == null || CurrentAccount.Session == null || CurrentAccount.Token == null)
                 return;
             if (CurrentAccount.Upload == null) {
-		CurrentAccount.Upload = new Upload();
+		CurrentAccount.Upload = new Upload(Log);
 	    }
 	    Upload upload = CurrentAccount.Upload;
 	    if (upload.Uploading()) {
