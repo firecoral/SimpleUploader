@@ -9,9 +9,9 @@ using System.Runtime.CompilerServices;
 [assembly: AssemblyTitle("UploadExpress")]
 [assembly: AssemblyDescription("DigiProofs Image Upload Application")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("DigiProofs Inc.")]
+[assembly: AssemblyCompany("DigiProofs")]
 [assembly: AssemblyProduct("UploadExpress")]
-[assembly: AssemblyCopyright("Copyright Digiproofs Inc. 2012")]
+[assembly: AssemblyCopyright("Copyright © 2017")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]		
 
@@ -26,7 +26,7 @@ using System.Runtime.CompilerServices;
 // You can specify all the values or you can default the Revision and Build Numbers 
 // by using the '*' as shown below:
 
-[assembly: AssemblyVersion("1.3.2.*")]
+[assembly: AssemblyVersion("3.1.*")]
 
 //
 // In order to sign your assembly you must specify a key to use. Refer to the 

@@ -176,7 +176,7 @@ namespace DigiProofs.JSONUploader {
                 multipartFormDataContent.Add(emailContent, "\"email\"");
                 multipartFormDataContent.Add(passwordContent, "\"password\"");
                 multipartFormDataContent.Add(commandContent, "\"command\"");
-                HttpResponseMessage response = await httpClient.PostAsync("ul/upload", multipartFormDataContent);
+                HttpResponseMessage response = await httpsClient.PostAsync("ul/upload", multipartFormDataContent);
                 if (response.IsSuccessStatusCode) {
                     // ReadAsAsync is a nice way to deserialize the JSON into an object,
                     // but the are library issues that keep it from working at the moment,

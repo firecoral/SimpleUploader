@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using DigiProofs.JSONUploader;
 using DigiProofs.Logger;
+using System.Reflection;
+
 
 namespace UploadExpress
 {
@@ -84,7 +86,7 @@ namespace UploadExpress
 	    this.purge_btn.Tag = menuPurge;
 
             Shown += UploadExpress_Shown;
-	}
+        }
 
         // This is just a stub function for now, but can be used if in the future
         // we need to do some initialization before creating the UploadExpress form.
@@ -657,7 +659,14 @@ namespace UploadExpress
 	// Show the about dialog
 	//
 	private void menuAbout_Click(object sender, System.EventArgs e) {
-	    About aboutDlg = new About();
+            Assembly thisAssem = typeof(UploadExpress).Assembly;
+            AssemblyName thisAssemName = thisAssem.GetName();
+            string company = thisAssem.GetCustomAttribute<AssemblyCom‌​panyAttribute>().Com‌​pany;
+            string copyright = thisAssem.GetCustomAttribute<AssemblyCopyrightAttribute>().Copyright;
+            string version = thisAssemName.Version.ToString();
+            string name = thisAssemName.Name.ToString();
+
+            About aboutDlg = new About(name, version, company, copyright);
 	    aboutDlg.ShowDialog();
 	}
 
