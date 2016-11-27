@@ -445,8 +445,6 @@ namespace UploadExpress
 	    acct.Server = server.Text;
 	    acct.UseCompression = compression.Checked;
 	    acct.CompressionRate = amount.Value * 10;
-	    // XXX if (acct.Session != null)
-		// XXX acct.Session.Update(acct.Server, acct.Email, acct.Password);
 	}
 
         // Update the label when the trackbar is changed.

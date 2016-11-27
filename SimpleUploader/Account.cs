@@ -1,12 +1,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Windows.Forms;
+using System.Runtime.InteropServices;
 using DigiProofs.JSONUploader;
 using Newtonsoft.Json;
 
-
+[assembly: ComVisible(false)]
 namespace UploadExpress {
 
     /// <summary>
@@ -158,13 +158,13 @@ namespace UploadExpress {
             this.Email = email;
         }
 
-	public override string ToString() {
+        public override string ToString() {
 	    return this.Text;
 	}
     }
     
     public class AccountList : List<Account> {
-	public delegate void AccountListChangedHandler(object uploadSet, EventArgs e);
+	public delegate void AccountListChangedHandler(object sender, EventArgs e);
 	public event AccountListChangedHandler AccountListChanged;
 
 	public Account DefaultAccount {

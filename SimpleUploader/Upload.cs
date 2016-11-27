@@ -141,7 +141,11 @@ namespace UploadExpress {
                 }
                 catch (SessionException ex) {
                     switch (ex.Error) {
-                        // XXX should check for failed login
+                        case SessionError.NotLoggedIn:
+                            string message = "You are not logged in.  Please refresh your login and restart your upload session.";
+                            MessageBox.Show(message, "UploadExpress", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            contiguousErrors = 90;  // Force stop
+                            break;
                         case SessionError.NetworkError:     // Retry
                         case SessionError.ServerError:
                         case SessionError.UnknownError:
@@ -158,40 +162,43 @@ namespace UploadExpress {
             LabelUpdate("Event: " + uploadSet.eventTitle, "Page: " + page.title, "Image: " + image.Title);
             UploadMetrics metrics = new UploadMetrics(uploadSet.eventTitle, uploadSet.eventID, page.title, page.pageID, image.Title, image.Path);
             try {
-                Stream imageStream = new FileStream(image.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                metrics.FileSize = imageStream.Length;
+                using (Stream imageStream = new FileStream(image.Path, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+                    metrics.FileSize = imageStream.Length;
 
-                // The following code will be used for Self Fulfilled pros, or other pros that we have overridden
-                // to scale down their images.  These ignore the compression settings (in order to scale) and always
-                // use a compression of 90.  (awei 11/2016)
-                if (account.Session.MaxSize > 0) {
-                    ImageProcess imageProcess = new ImageProcess(imageStream, 90, account.Session.MaxSize);
-                    imageStream.Close();
-                    imageStream = imageProcess.GetImageStream();
-                    metrics.CompressedSize = imageStream.Length;
-                    metrics.Compression = 90;
-                    metrics.Scale = account.Session.MaxSize;
+                    // The following code will be used for Self Fulfilled pros, or other pros that we have overridden
+                    // to scale down their images.  These ignore the compression settings (in order to scale) and always
+                    // use a compression of 90.  (awei 11/2016)
+                    if (account.Session.MaxSize > 0) {
+                        ImageProcess imageProcess = new ImageProcess(imageStream, 90, account.Session.MaxSize);
+                        using (Stream imageStreamCompress = imageProcess.GetImageStream()) {
+                            metrics.CompressedSize = imageStreamCompress.Length;
+                            image.ImageID = await account.Session.Upload(page.pageID, image.Path, imageStreamCompress);
+                        }
+                        metrics.Compression = 90;
+                        metrics.Scale = account.Session.MaxSize;
+                    }
+                    else if (account.UseCompression) {
+                        ImageProcess imageProcess = new ImageProcess(imageStream, account.CompressionRate, 0);
+                        using (Stream imageStreamCompress = imageProcess.GetImageStream()) {
+                            metrics.CompressedSize = imageStreamCompress.Length;
+                            image.ImageID = await account.Session.Upload(page.pageID, image.Path, imageStreamCompress);
+                        }
+                        metrics.Compression = account.CompressionRate;
+                    }
+                    else {
+                        image.ImageID = await account.Session.Upload(page.pageID, image.Path, imageStream);
+                    }
+                    metrics.ImageId = image.ImageID;
+                    contiguousErrors = 0;
+                    uploadedFiles++;
+                    work.Dequeue(); // Can now safely remove from queue
+                    image.Status = ImageStatus.Uploaded;
+                    image.Uploading = false;
+                    UploadLog(image.FileName + " - Uploaded");
+                    uploadSet.Serialize();
+                    uploadSet.AsyncUpdateNodes(false);
+                    ProgressIncrement((int)image.Size);
                 }
-                else if (account.UseCompression) {
-                    ImageProcess imageProcess = new ImageProcess(imageStream, account.CompressionRate, 0);
-                    imageStream = imageProcess.GetImageStream();
-                    metrics.CompressedSize = imageStream.Length;
-                    metrics.Compression = account.CompressionRate;
-                }
-                // else upload directly from the FileStream.
-
-                image.ImageID = await account.Session.Upload(page.pageID, image.Path, imageStream);
-                metrics.ImageId = image.ImageID;
-                imageStream.Close();
-                contiguousErrors = 0;
-                uploadedFiles++;
-                work.Dequeue(); // Can now safely remove from queue
-                image.Status = ImageStatus.Uploaded;
-                image.Uploading = false;
-                UploadLog(image.FileName + " - Uploaded");
-                uploadSet.Serialize();
-                uploadSet.AsyncUpdateNodes(false);
-                ProgressIncrement((int)image.Size);
             }
             catch (SessionException ex) {
                 log.Add(new LogEntry("Upload Error:", ex.Message));
@@ -260,6 +267,9 @@ namespace UploadExpress {
                         break;
                 }
             }
+            catch (Exception e) {
+                Console.WriteLine(e.ToString());
+            }
             log.Add(new LogEntry("Upload Metrics:", metrics.ToString()));
             return;
         }
@@ -295,7 +305,6 @@ namespace UploadExpress {
                     ProgressIncrement((int)workUnit.Image.Size);
                 }
             }
-            // XXX await Next();
         }
 
         private void ProgressIncrement(int size) {

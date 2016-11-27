@@ -103,7 +103,6 @@ namespace UploadExpress {
 	//
 	public void AddPage(string path, int maxPageImages, Account.SortOrders sortOrder, bool top) {
 	    DirectoryInfo dir = new DirectoryInfo(path);
-	    Console.WriteLine("Adding directory: {0}", path);
 	    ArrayList files = new ArrayList();
 	    files.AddRange(dir.GetFiles("*.jpg"));
 	    DirectoryInfo[] dirs = dir.GetDirectories();
@@ -209,7 +208,6 @@ namespace UploadExpress {
 		dlg.SelectedPath = selectedPath;
 
 	    if (dlg.ShowDialog() == DialogResult.OK) {
-		Console.WriteLine("got directory: {0}", dlg.SelectedPath);
 		AddPage(dlg.SelectedPath, context.CurrentAccount.MaxPageImages, context.CurrentAccount.SortOrder, true);
 		AsyncUpdateNodes(true);
 		Status = UploadStatus.Ready;
@@ -276,21 +274,21 @@ namespace UploadExpress {
 	}
 
 	public void Serialize() {
-	    // This is hokey.  I can't serialize the uploadSet when there are events
-	    // associated with UploadSetChanged.  So I remove them here, serialize, and
-	    // replace them.
-	    
-//	    Delegate[] list = null;
-//	    if (UploadSetChanged != null) {
-//		list = UploadSetChanged.GetInvocationList();
-//		foreach (UploadSetChangedHandler del in list) {
-//		    UploadSetChanged -= del;
-//		}
-//	    }
-	    FileStream cfgStrm = new FileStream(fileName, FileMode.Create);
-	    SoapFormatter fmtr = new SoapFormatter();
-	    fmtr.Serialize(cfgStrm, this);
-	    cfgStrm.Close();
+            // This is hokey.  I can't serialize the uploadSet when there are events
+            // associated with UploadSetChanged.  So I remove them here, serialize, and
+            // replace them.
+
+            //	    Delegate[] list = null;
+            //	    if (UploadSetChanged != null) {
+            //		list = UploadSetChanged.GetInvocationList();
+            //		foreach (UploadSetChangedHandler del in list) {
+            //		    UploadSetChanged -= del;
+            //		}
+            //	    }
+            using (FileStream cfgStrm = new FileStream(fileName, FileMode.Create)) {
+                SoapFormatter fmtr = new SoapFormatter();
+                fmtr.Serialize(cfgStrm, this);
+            }
 //	    if (list != null) {
 //		foreach (UploadSetChangedHandler del in list) {
 //		    UploadSetChanged += del;
@@ -315,21 +313,23 @@ namespace UploadExpress {
 	}
 	    
 	public static UploadSet GetUploadSet(string fileName, UploadExpress context) {
-	    FileStream cfgStrm = new FileStream(fileName, FileMode.Open);
-	    SoapFormatter fmtr = new SoapFormatter();
-	    try {
-		UploadSet ret = (UploadSet) fmtr.Deserialize(cfgStrm);
-		if (!ret.fileName.Equals(fileName)) {
-		    ret.fileName = fileName;
-		    ret.Serialize();
-		}
-		ret.context = context;
-		return ret;
-	    }
-	    finally {
-		cfgStrm.Close();
-	    }
-	}
+            try {
+                using (FileStream cfgStrm = new FileStream(fileName, FileMode.Open)) {
+                    SoapFormatter fmtr = new SoapFormatter();
+                    UploadSet ret = (UploadSet)fmtr.Deserialize(cfgStrm);
+                    if (!ret.fileName.Equals(fileName)) {
+                        ret.fileName = fileName;
+                        ret.Serialize();
+                    }
+                    ret.context = context;
+                    return ret;
+                }
+            }
+            catch (Exception e) {
+                Console.WriteLine(e.ToString());
+                return null;
+            }
+        }
 
 	public virtual void OnDeserialization(Object Sender) {
 	    refreshDelegate = new RefreshDelegate(UpdateNodes);

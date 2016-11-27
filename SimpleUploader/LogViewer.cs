@@ -128,14 +128,12 @@ namespace UploadExpress
 	    SaveFileDialog dlg = new SaveFileDialog();
 	    dlg.FileName = "UploadLog.txt";
 
-	    if(dlg.ShowDialog() == DialogResult.OK) {
-		Stream myStream;
-		if ((myStream = dlg.OpenFile()) != null) {
-		    StreamWriter strm = new StreamWriter(myStream);
-		    strm.Write(textBox1.Text);
-		    strm.Close();
-                    myStream.Close();
-		}
+	    if (dlg.ShowDialog() == DialogResult.OK) {
+                Stream myStream = dlg.OpenFile();
+                using (StreamWriter strm = new StreamWriter(myStream)) {
+                    strm.Write(textBox1.Text);
+                }
+                // Assume that myStream will be disposed with the dialog.
 	    }
 	}
     }

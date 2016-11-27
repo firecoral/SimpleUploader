@@ -3,6 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+//using System.Net;
+//using System.Net.Security;
+//using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -111,7 +114,7 @@ namespace UploadExpress
                     Directory.CreateDirectory(dataDirPath);
                 }
                 catch {
-                    //XXX  process Error
+                    log.Add(new LogEntry("Could not find or create data file directory path", dataDirPath));
                 }
             }
             dataDirPath += Path.DirectorySeparatorChar;
@@ -169,12 +172,10 @@ namespace UploadExpress
                     accounts.SaveAccounts();
                     return;
                 }
-                // if the dialog is cancelled, we abort here.
                 MessageBox.Show("You must provide an account to use this program",
                             "UploadExpress",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Error);
-                //Environment.Exit(0);
                 return;
             }
         }
@@ -642,17 +643,18 @@ namespace UploadExpress
 	    }
 
 
-	    EventChooser chooseEvent = new EventChooser(new ArrayList(CurrentAccount.Session.EventList));
-	    chooseEvent.ShowDialog();
-	    if (chooseEvent.DialogResult == DialogResult.OK) {
-		Event ev = chooseEvent.GetSelectedEvent();
-		UploadSet uploadSet = new UploadSet(dataDirPath, ev.event_id, ev.title, this, CurrentAccount.Email);
-		CurrentAccount.UploadSetList.Add(uploadSet);
-		treeView1.BeginUpdate();
-		treeView1.Nodes.Add(uploadSet.node);
-		treeView1.SelectedNode = uploadSet.node;
-		treeView1.EndUpdate();
-	    }
+            using (EventChooser chooseEvent = new EventChooser(new ArrayList(CurrentAccount.Session.EventList))) {
+                chooseEvent.ShowDialog();
+                if (chooseEvent.DialogResult == DialogResult.OK) {
+                    Event ev = chooseEvent.GetSelectedEvent();
+                    UploadSet uploadSet = new UploadSet(dataDirPath, ev.event_id, ev.title, this, CurrentAccount.Email);
+                    CurrentAccount.UploadSetList.Add(uploadSet);
+                    treeView1.BeginUpdate();
+                    treeView1.Nodes.Add(uploadSet.node);
+                    treeView1.SelectedNode = uploadSet.node;
+                    treeView1.EndUpdate();
+                }
+            }
 	}
 
 	//
@@ -870,6 +872,7 @@ namespace UploadExpress
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+            //ServicePointManager.ServerCertificateValidationCallback = CertificateValidationCallBack;
 
             Start1 p = new Start1();
             p.ExitRequested += p_ExitRequested;
@@ -919,5 +922,50 @@ namespace UploadExpress
             if (ExitRequested != null)
                 ExitRequested(this, e);
         }
+
+        //
+        // This could be used in the future, but I was successful at installing the digiproofs CA (root)
+        // certificate so normal validation worked.
+        //
+        //private static bool CertificateValidationCallBack(
+        //object sender,
+        //System.Security.Cryptography.X509Certificates.X509Certificate certificate,
+        //System.Security.Cryptography.X509Certificates.X509Chain chain,
+        //System.Net.Security.SslPolicyErrors sslPolicyErrors) {
+        //    // If the certificate is a valid, signed certificate, return true.
+        //    if (sslPolicyErrors == System.Net.Security.SslPolicyErrors.None) {
+        //        return true;
+        //    }
+
+        //    // If there are errors in the certificate chain, look at each error to determine the cause.
+        //    if ((sslPolicyErrors & System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors) != 0) {
+        //        if (chain != null && chain.ChainStatus != null) {
+        //            foreach (System.Security.Cryptography.X509Certificates.X509ChainStatus status in chain.ChainStatus) {
+        //                if ((certificate.Subject == certificate.Issuer) &&
+        //                   (status.Status == System.Security.Cryptography.X509Certificates.X509ChainStatusFlags.UntrustedRoot)) {
+        //                    // Self-signed certificates with an untrusted root are valid. 
+        //                    continue;
+        //                }
+        //                else {
+        //                    if (status.Status != System.Security.Cryptography.X509Certificates.X509ChainStatusFlags.NoError) {
+        //                        // If there are any other errors in the certificate chain, the certificate is invalid,
+        //                        // so the method returns false.
+        //                        return false;
+        //                    }
+        //                }
+        //            }
+        //        }
+
+        //        // When processing reaches this line, the only errors in the certificate chain are 
+        //        // untrusted root errors for self-signed certificates. These certificates are valid
+        //        // for default Exchange server installations, so return true.
+        //        return true;
+        //    }
+        //    else {
+        //        // In all other cases, return false.
+        //        return false;
+        //    }
+        //}
+
     }
 }
