@@ -167,7 +167,7 @@ namespace UploadExpress
                         log.Add(new LogEntry(String.Format("Obtained Events for {0}", account.Email), ""));
                     }
                     else {
-                        statusBar1.Text = "Logged in failed";
+                        statusBar1.Text = "Login failed";
                     }
                     accounts.SaveAccounts();
                     return;
