@@ -24,7 +24,7 @@ namespace JSONUploaderTest
             try {
                 session = new NetSession(log, "cdev.digiproofs.com", "cself@digiproofs.com", "Token", proxy);
                 log.Add(new LogEntry("Testing GetToken", ""));
-                string token = await session.GetToken("2081");
+                string token = await session.GetTokenAsync("2081");
                 log.Add(new LogEntry("Got token:" + token, ""));
                 log.Add(new LogEntry("Testing GetEventList", ""));
                 await session.GetEventListAsync();
@@ -37,13 +37,13 @@ namespace JSONUploaderTest
                 else {
                     int event_id = session.EventList[0].event_id;
                     log.Add(new LogEntry("Testing NewPage", ""));
-                    int page_id = await session.NewPage(event_id, "New Page: Windows Testing");
+                    int page_id = await session.NewPageAsync(event_id, "New Page: Windows Testing");
                     log.Add(new LogEntry(String.Format("Added new page: {0} to event {1}", page_id, event_id), ""));
 
                     log.Add(new LogEntry("Testing Upload", ""));
                     string filename = "C:\\test1.jpg";
                     Stream image = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    string image_id = await session.Upload(page_id, "test1.jpg", image);
+                    string image_id = await session.UploadAsync(page_id, "test1.jpg", image);
                     log.Add(new LogEntry(String.Format("Uploaded image: {0}", image_id), ""));
                 }
             }

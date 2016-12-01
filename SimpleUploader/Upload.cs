@@ -135,7 +135,7 @@ namespace UploadExpress {
             }
             if (page.pageID == 0) {
                 try {
-                    page.pageID = await account.Session.NewPage(uploadSet.eventID, page.title);
+                    page.pageID = await account.Session.NewPageAsync(uploadSet.eventID, page.title);
                     uploadSet.Serialize();
                     UploadLog(page.title + "- Page Created");
                 }
@@ -172,7 +172,7 @@ namespace UploadExpress {
                         ImageProcess imageProcess = new ImageProcess(imageStream, 90, account.Session.MaxSize);
                         using (Stream imageStreamCompress = imageProcess.GetImageStream()) {
                             metrics.CompressedSize = imageStreamCompress.Length;
-                            image.ImageID = await account.Session.Upload(page.pageID, image.Path, imageStreamCompress);
+                            image.ImageID = await account.Session.UploadAsync(page.pageID, image.Path, imageStreamCompress);
                         }
                         metrics.Compression = 90;
                         metrics.Scale = account.Session.MaxSize;
@@ -181,12 +181,12 @@ namespace UploadExpress {
                         ImageProcess imageProcess = new ImageProcess(imageStream, account.CompressionRate, 0);
                         using (Stream imageStreamCompress = imageProcess.GetImageStream()) {
                             metrics.CompressedSize = imageStreamCompress.Length;
-                            image.ImageID = await account.Session.Upload(page.pageID, image.Path, imageStreamCompress);
+                            image.ImageID = await account.Session.UploadAsync(page.pageID, image.Path, imageStreamCompress);
                         }
                         metrics.Compression = account.CompressionRate;
                     }
                     else {
-                        image.ImageID = await account.Session.Upload(page.pageID, image.Path, imageStream);
+                        image.ImageID = await account.Session.UploadAsync(page.pageID, image.Path, imageStream);
                     }
                     metrics.ImageId = image.ImageID;
                     contiguousErrors = 0;

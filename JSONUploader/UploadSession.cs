@@ -165,7 +165,7 @@ namespace DigiProofs.JSONUploader {
 
         // Use the password to obtain a token from the server.
 
-        public async Task<string> GetToken(string password) {
+        public async Task<string> GetTokenAsync(string password) {
             string resultJSON = "";
             try {
                 HttpContent emailContent = new StringContent(Email);
@@ -187,6 +187,10 @@ namespace DigiProofs.JSONUploader {
                     // Login error (1020) is a bad password.  All others are severe errors.
                     switch (token.code) {
                         case 100:
+                            if (token.token == null || token.token == "") {
+                                log.Add(new LogEntry("GetToken Failure", "Empty Token Return By Server"));
+                                throw new SessionException("Could not log in", SessionError.InternalError);
+                            }
                             this.uploadToken = token.token;
                             log.Add(new LogEntry("got token for " + Email, ""));
                             return token.token;  // We return the token so that the calling program can cache it.
@@ -200,15 +204,19 @@ namespace DigiProofs.JSONUploader {
                             throw new SessionException(token.message, SessionError.UnknownError);
                     }
                 }
+                else {
+                    log.Add(new LogEntry("GetToken Failure", response.ReasonPhrase));
+                    throw new SessionException(response.ReasonPhrase, SessionError.InternalError);
+                }
             }
-            catch (SessionException e) {
+            catch (SessionException) {
                 this.uploadToken = null;
-                throw e;
+                throw;
             }
-            catch (System.Net.WebException e) {
+            catch (Exception e) when (e is System.Net.WebException || e is System.Net.Http.HttpRequestException) {
                 log.Add(new LogEntry("Network connection error during login to " + Email, e.Message));
                 this.uploadToken = null;
-                throw new SessionException(e.ToString(), SessionError.NetworkError, e);
+                throw new SessionException(e.ToString(), SessionError.NetworkError);
             }
 
             catch (System.InvalidOperationException e) {
@@ -227,8 +235,6 @@ namespace DigiProofs.JSONUploader {
                 this.uploadToken = null;
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
-            return null;
-
         }
 
 
@@ -271,15 +277,18 @@ namespace DigiProofs.JSONUploader {
                         default:
                             throw new SessionException(eventList.message, SessionError.UnknownError);
                     }
-
+                }
+                else {
+                    log.Add(new LogEntry("GetEventListAsync Failure", response.ReasonPhrase));
+                    throw new SessionException(response.ReasonPhrase, SessionError.InternalError);
                 }
             }
-            catch (SessionException e) {
-                throw e;
+            catch (SessionException) {
+                throw;
             }
-            catch (System.Net.WebException e) {
+            catch (Exception e) when (e is System.Net.WebException || e is System.Net.Http.HttpRequestException) {
                 log.Add(new LogEntry("Network connection error during event fetch to " + email, e.Message));
-                throw new SessionException(e.ToString(), SessionError.NetworkError, e);
+                throw new SessionException(e.ToString(), SessionError.NetworkError);
             }
 
             catch (System.InvalidOperationException e) {
@@ -298,7 +307,7 @@ namespace DigiProofs.JSONUploader {
             }
         }
 
-        public async Task<int> NewPage(int event_id, string title) {
+        public async Task<int> NewPageAsync(int event_id, string title) {
             string resultJSON = "";
             try {
                 if (this.uploadToken == null)
@@ -336,15 +345,18 @@ namespace DigiProofs.JSONUploader {
                         default:
                             throw new SessionException(newPage.message, SessionError.UnknownError);
                     }
-
+                }
+                else {
+                    log.Add(new LogEntry("NewPageAsync Failure", response.ReasonPhrase));
+                    throw new SessionException(response.ReasonPhrase, SessionError.InternalError);
                 }
             }
-            catch (SessionException e) {
-                throw e;
+            catch (SessionException) {
+                throw;
             }
-            catch (System.Net.WebException e) {
+            catch (Exception e) when (e is System.Net.WebException || e is System.Net.Http.HttpRequestException) {
                 log.Add(new LogEntry("Network connection error during page create " + email, e.Message));
-                throw new SessionException(e.ToString(), SessionError.NetworkError, e);
+                throw new SessionException(e.ToString(), SessionError.NetworkError);
             }
 
             catch (System.InvalidOperationException e) {
@@ -361,10 +373,9 @@ namespace DigiProofs.JSONUploader {
                 log.Add(new LogEntry("Unexpected error during page create " + email, e.Message));
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
-            return 0;
         }
 
-        public async Task<string> Upload(int page_id, string filename, Stream image) {
+        public async Task<string> UploadAsync(int page_id, string filename, Stream image) {
             string resultJSON = "";
             try {
                 if (this.uploadToken == null)
@@ -413,15 +424,18 @@ namespace DigiProofs.JSONUploader {
                         default:
                             throw new SessionException(upload.message, SessionError.UnknownError);
                     }
-
+                }
+                else {
+                    log.Add(new LogEntry("UploadAsync Failure", response.ReasonPhrase));
+                    throw new SessionException(response.ReasonPhrase, SessionError.InternalError);
                 }
             }
-            catch (SessionException e) {
-                throw e;
+            catch (SessionException) {
+                throw;
             }
-            catch (System.Net.WebException e) {
+            catch (Exception e) when (e is System.Net.WebException || e is System.Net.Http.HttpRequestException) {
                 log.Add(new LogEntry("Network connection error during upload " + filename, e.Message));
-                throw new SessionException(e.ToString(), SessionError.NetworkError, e);
+                throw new SessionException(e.ToString(), SessionError.NetworkError);
             }
 
             catch (System.InvalidOperationException e) {
@@ -438,7 +452,6 @@ namespace DigiProofs.JSONUploader {
                 log.Add(new LogEntry("Unexpected error during event fetch to " + filename, e.Message));
                 throw new SessionException(e.ToString(), SessionError.UnknownError, e);
             }
-            return null;
         }
     }
 }

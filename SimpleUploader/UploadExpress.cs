@@ -105,27 +105,32 @@ namespace UploadExpress
 
 
         public async Task AccountsAsync() {
-            // Generate data file directory and make sure it exists.
-            dataDirPath = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
-            dataDirPath += Path.DirectorySeparatorChar;
-            dataDirPath += "DigiProofs";
-            if (!Directory.Exists(dataDirPath)) {
-                try {
-                    Directory.CreateDirectory(dataDirPath);
+            try {
+                // Generate data file directory and make sure it exists.
+                dataDirPath = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+                dataDirPath += Path.DirectorySeparatorChar;
+                dataDirPath += "DigiProofs";
+                if (!Directory.Exists(dataDirPath)) {
+                    try {
+                        Directory.CreateDirectory(dataDirPath);
+                    }
+                    catch {
+                        fatalError("Could not find or create data file directory path" + dataDirPath);
+                    }
                 }
-                catch {
-                    log.Add(new LogEntry("Could not find or create data file directory path", dataDirPath));
-                }
-            }
-            dataDirPath += Path.DirectorySeparatorChar;
+                dataDirPath += Path.DirectorySeparatorChar;
 
-            log.Add(new LogEntry("Loading Accounts", ""));
-            accounts = AccountList.GetAccounts();
-            if (accounts.Count == 0) {
-                await InitialAccount();
+                log.Add(new LogEntry("Loading Accounts", ""));
+                accounts = AccountList.GetAccounts();
+                if (accounts.Count == 0) {
+                    await InitialAccount();
+                }
+                accounts.AccountListChanged += new AccountList.AccountListChangedHandler(accountListChanged);
+                accountListChanged(accounts, EventArgs.Empty);
             }
-            accounts.AccountListChanged += new AccountList.AccountListChangedHandler(accountListChanged);
-            accountListChanged(accounts, EventArgs.Empty);
+            catch (Exception e) {
+                fatalError(e.ToString());
+            }
         }
 
         // <summary>
@@ -233,7 +238,7 @@ namespace UploadExpress
         // </summary>
         public async Task<string> GetToken(Account account, string password) {
             try {
-                string token = await account.Session.GetToken(password);
+                string token = await account.Session.GetTokenAsync(password);
                 return token;
             }
             catch (SessionException ex) {
@@ -863,6 +868,18 @@ namespace UploadExpress
 		contextMenu1.MenuItems.Add(DeleteImage);
 	    }
 	}
+
+        /// <summary>
+        /// An unexpected error has occurred.  Try to display the message, then bail out.
+        /// Really - this should never happen.
+        /// </summary>
+        private void fatalError(string message) {
+            MessageBox.Show(message,
+                        "UploadExpress",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+            Environment.Exit(1);
+        }
     }
 
     // Main has been refactored here as per: https://msdn.microsoft.com/en-us/magazine/mt620013.aspx

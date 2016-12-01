@@ -14,7 +14,13 @@ namespace UploadExpress {
     /// We provide for multiple accounts since some pros use both self and fulfillment accounts.
     /// In addition, it's nice for testing.
     /// </summary>
-    /// 
+    ///
+
+    // These exceptions are generally unlikely and should be treated as fatal.
+    public class AccountException : Exception {
+        public AccountException(string reason) : base(reason) {
+        }
+    }
 
     // The JsonObject and JsonProperty properties are used to limit serialization to specific
     // properties.  If the ListViewItem base class gets involved, serialization gets trashed.
@@ -232,7 +238,7 @@ namespace UploadExpress {
                 Properties.Settings.Default.Save();
             }
             catch {
-                Console.WriteLine("Error in SaveAccounts");
+                throw new AccountException("Could not save AccountList.");
             }
         }
 
@@ -245,13 +251,12 @@ namespace UploadExpress {
                 if (jsonAccountList == null || jsonAccountList.Length == 0) {
                     return new AccountList();
                 }
-                AccountList accountList = JsonConvert.DeserializeObject<AccountList>(jsonAccountList);               
+                AccountList accountList = JsonConvert.DeserializeObject<AccountList>(jsonAccountList);
                 return accountList;
             }
             catch {
-                Console.WriteLine("Error in GetAccounts");
+                throw new AccountException("Could not get AccountList.");
             }
-            return new AccountList();
-	}
+        }
     }
 }
