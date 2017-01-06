@@ -156,7 +156,7 @@ namespace UploadExpress {
 	    sortOrder = SortOrders.Name;
 	    compression = true;
 	    compressionRate = 80;
-	    server = "cdev.digiproofs.com";
+	    server = "u.digiproofs.com";
 	    proxyOn = false;
         }
 
