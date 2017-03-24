@@ -5,6 +5,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using DigiProofs.Logger;
@@ -85,6 +86,7 @@ namespace DigiProofs.JSONUploader {
         NetworkError,       // Any network error
         ServerError,        // Any error on the digiproofs servers
         UnknownWebError,    // An unexpected SoapException occured
+        WebRequestTimeout,  // Request has timed out
         InternalError,      // Programming error
         UnknownError,	    // An unexpected error has occurred.
     };
@@ -158,6 +160,14 @@ namespace DigiProofs.JSONUploader {
             httpClient.DefaultRequestHeaders.Accept.Clear();
             httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             httpClient.BaseAddress = new Uri(HTTPurl);
+            // The .NET default timeout is 100 seconds, which is too low for a big image on a slow connections.
+            // The Apache default on the server side is 300 seconds.  We'll use 600 seconds here to make sure the
+            // server times out rather that the app (and give ourselves some buffer space if we decide to increase
+            // the server timeout in the future).  If it takes more than ten minutes to upload an image, this is
+            // probably the wrong way to do it.  We could have used the infinite time span, but I didn't want the
+            // app to just sit there forever if some unforeseen problem arises.
+            httpClient.Timeout = new TimeSpan(0, 10, 0);
+            //httpClient.Timeout = Timeout.InfiniteTimeSpan;
             httpsClient.DefaultRequestHeaders.Accept.Clear();
             httpsClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             httpsClient.BaseAddress = new Uri(HTTPSurl);
@@ -377,6 +387,7 @@ namespace DigiProofs.JSONUploader {
 
         public async Task<string> UploadAsync(int page_id, string filename, Stream image) {
             string resultJSON = "";
+            var cts = new CancellationTokenSource();
             try {
                 if (this.uploadToken == null)
                     throw new SessionException("Not Logged In", SessionError.NotLoggedIn);
@@ -400,7 +411,6 @@ namespace DigiProofs.JSONUploader {
                     Upload upload = JsonConvert.DeserializeObject<Upload>(resultJSON);
                     switch (upload.code) {
                         case 100:
-                            log.Add(new LogEntry(String.Format("Upload Complete {0}: {1}", upload.image_id, filename), ""));
                             return upload.image_id;
                         case 1030:
                             this.uploadToken = null;
@@ -436,6 +446,17 @@ namespace DigiProofs.JSONUploader {
             catch (Exception e) when (e is System.Net.WebException || e is System.Net.Http.HttpRequestException) {
                 log.Add(new LogEntry("Network connection error during upload " + filename, e.Message));
                 throw new SessionException(e.ToString(), SessionError.NetworkError);
+            }
+
+            catch (TaskCanceledException e) {
+                if (e.CancellationToken == cts.Token) {
+                    // a real cancellation, triggered by the caller - this is unexpected
+                    throw new SessionException(e.ToString(), SessionError.UnknownError, e);
+                }
+                else {
+                    log.Add(new LogEntry("Probable timeout during upload", e.Message));
+                    throw new SessionException("Probable timeout during upload", SessionError.WebRequestTimeout, e);
+                }
             }
 
             catch (System.InvalidOperationException e) {

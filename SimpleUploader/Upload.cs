@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -162,6 +163,7 @@ namespace UploadExpress {
             LabelUpdate("Event: " + uploadSet.eventTitle, "Page: " + page.title, "Image: " + image.Title);
             UploadMetrics metrics = new UploadMetrics(uploadSet.eventTitle, uploadSet.eventID, page.title, page.pageID, image.Title, image.Path);
             try {
+                Stopwatch stopWatch = new Stopwatch();
                 using (Stream imageStream = new FileStream(image.Path, FileMode.Open, FileAccess.Read, FileShare.Read)) {
                     metrics.FileSize = imageStream.Length;
 
@@ -172,6 +174,7 @@ namespace UploadExpress {
                         ImageProcess imageProcess = new ImageProcess(imageStream, 90, account.Session.MaxSize);
                         using (Stream imageStreamCompress = imageProcess.GetImageStream()) {
                             metrics.CompressedSize = imageStreamCompress.Length;
+                            stopWatch.Start();
                             image.ImageID = await account.Session.UploadAsync(page.pageID, image.Path, imageStreamCompress);
                         }
                         metrics.Compression = 90;
@@ -181,13 +184,17 @@ namespace UploadExpress {
                         ImageProcess imageProcess = new ImageProcess(imageStream, account.CompressionRate, 0);
                         using (Stream imageStreamCompress = imageProcess.GetImageStream()) {
                             metrics.CompressedSize = imageStreamCompress.Length;
+                            stopWatch.Start();
                             image.ImageID = await account.Session.UploadAsync(page.pageID, image.Path, imageStreamCompress);
                         }
                         metrics.Compression = account.CompressionRate;
                     }
                     else {
+                        stopWatch.Start();
                         image.ImageID = await account.Session.UploadAsync(page.pageID, image.Path, imageStream);
                     }
+                    stopWatch.Stop();
+                    metrics.Milliseconds = stopWatch.ElapsedMilliseconds;
                     metrics.ImageId = image.ImageID;
                     contiguousErrors = 0;
                     uploadedFiles++;
@@ -210,6 +217,7 @@ namespace UploadExpress {
                         contiguousErrors = 90;  // Force stop
                         break;
                     case SessionError.NetworkError:     // Retry
+                    case SessionError.WebRequestTimeout:
                     case SessionError.ServerError:
                     case SessionError.UnknownError:
                         // It's possible that in some of the above cases we want to either
@@ -502,6 +510,10 @@ namespace UploadExpress {
             set { error_message = value; }
         }
         string error_message = null;
+        public long Milliseconds {
+            set { milliseconds = value; }
+        }
+        long milliseconds = 0;
 
         public UploadMetrics(string event_title, int event_id, string page_title, int page_id, string image_title, string image_path) {
             this.event_title = event_title;
@@ -531,6 +543,15 @@ namespace UploadExpress {
                     res += Environment.NewLine;
                 }
                 res += String.Format("    Compressed Size: {0}", compressed_size);
+                res += Environment.NewLine;
+            }
+            if (milliseconds > 0 && file_size > 0) {
+                double bandwidth = (double)file_size * 8.0 / milliseconds / 1000.0;  // Mbit/sec
+                if (compressed_size > 0)
+                    bandwidth = (double)compressed_size * 8.0 / milliseconds / 1000.0;  // Mbit/sec
+                res += String.Format("    Upload Time (ms): {0}", milliseconds);
+                res += Environment.NewLine;
+                res += String.Format("    Bandwidth: {0:0.0000} Mbit/sec", bandwidth);
                 res += Environment.NewLine;
             }
             if (image_id != null) {
